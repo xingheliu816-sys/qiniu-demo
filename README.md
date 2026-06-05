@@ -29,7 +29,13 @@ python app.py
 
 ### 前端
 
-前端模块将在独立 PR 中补充，补充后需要同步更新本章节。
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+前端默认通过 `NEXT_PUBLIC_API_URL` 连接后端 API；未设置时使用 `http://localhost:5000`。
 
 ## 目录结构
 
@@ -39,6 +45,10 @@ qiniu-demo/
 ├── CONTRIBUTING.md
 ├── docs/
 ├── frontend/
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── public/
+│   └── src/
 └── backend/
     ├── app.py
     ├── config.example.py
@@ -57,6 +67,18 @@ qiniu-demo/
 | Flask | 提供后端 Web API 服务 |
 | mysql-connector-python | 连接 MySQL 数据库 |
 
+### 前端依赖
+
+| 依赖 | 用途 |
+|------|------|
+| Next.js | 前端应用框架 |
+| React | 构建前端交互界面 |
+| React DOM | React 浏览器渲染 |
+| TypeScript | 前端类型检查 |
+| Tailwind CSS | 前端样式工具 |
+| ESLint | 前端代码检查 |
+| concurrently | 本地同时启动前后端 |
+
 后续如新增第三方库或框架，必须在本章节列明。原则上优先避免不必要的第三方依赖。
 
 ## 团队成员与分工
@@ -67,9 +89,9 @@ qiniu-demo/
 
 ## 原创功能与复用说明
 
-当前仓库包含初始化文档、目录结构和后端基础模块。
+当前仓库包含初始化文档、目录结构、后端基础模块和前端基础模块。
 
-* 原创内容：README、CONTRIBUTING、基础目录结构、后端用户与小说章节识别基础代码
+* 原创内容：README、CONTRIBUTING、基础目录结构、后端用户与小说章节识别基础代码、前端页面与交互代码
 * 复用内容：无
 
 后续如复用过往代码片段，必须在对应 PR 描述和本章节中注明来源。
