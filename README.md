@@ -16,7 +16,20 @@
 
 ## 安装与启动方式
 
-当前仓库仅完成初始化，尚未引入具体技术栈和启动方式。后续每次新增模块时，需要同步更新本章节。
+### 后端
+
+```bash
+cd backend
+pip install -r requirements.txt
+copy config.example.py config.py
+python app.py
+```
+
+运行前需要先在 `backend/config.py` 中填写本地 MySQL 连接信息，并执行 `backend/sql/init.sql` 初始化数据库。
+
+### 前端
+
+前端模块将在独立 PR 中补充，补充后需要同步更新本章节。
 
 ## 目录结构
 
@@ -27,11 +40,22 @@ qiniu-demo/
 ├── docs/
 ├── frontend/
 └── backend/
+    ├── app.py
+    ├── config.example.py
+    ├── requirements.txt
+    ├── sql/
+    ├── src/
+    └── tests/
 ```
 
 ## 依赖列表
 
-当前无第三方依赖。
+### 后端依赖
+
+| 依赖 | 用途 |
+|------|------|
+| Flask | 提供后端 Web API 服务 |
+| mysql-connector-python | 连接 MySQL 数据库 |
 
 后续如新增第三方库或框架，必须在本章节列明。原则上优先避免不必要的第三方依赖。
 
@@ -43,9 +67,9 @@ qiniu-demo/
 
 ## 原创功能与复用说明
 
-当前仓库仅包含初始化文档和目录结构，无业务功能代码。
+当前仓库包含初始化文档、目录结构和后端基础模块。
 
-* 原创内容：README、CONTRIBUTING、基础目录结构
+* 原创内容：README、CONTRIBUTING、基础目录结构、后端用户与小说章节识别基础代码
 * 复用内容：无
 
 后续如复用过往代码片段，必须在对应 PR 描述和本章节中注明来源。
