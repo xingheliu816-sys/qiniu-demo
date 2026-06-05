@@ -13,14 +13,24 @@ logs/
 # Env
 .env
 .env.local
+config.py
 
 # Dependencies
 node_modules/
 .venv/
 venv/
 __pycache__/
+*.py[cod]
 
 # Build
 dist/
 build/
 coverage/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# Local assistant settings
+.agents/
+.claude/
