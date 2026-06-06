@@ -73,9 +73,16 @@ export default function NovelsPage() {
   const statusTextMap: Record<string, { label: string; cls: string }> = {
     draft: { label: '草稿', cls: 'bg-warning/10 text-warning' },
     imported: { label: '已保存', cls: 'bg-success/10 text-success' },
-    parsed: { label: '已识别', cls: 'bg-success/10 text-success' },
+    parsed: { label: '已保存', cls: 'bg-success/10 text-success' },
     parse_failed: { label: '识别失败', cls: 'bg-error/10 text-error' },
   };
+
+  function getNovelStatus(novel: api.NovelItem): { label: string; cls: string } {
+    if (novel.chapter_count > 0) {
+      return { label: '已有章节', cls: 'bg-success/10 text-success' };
+    }
+    return statusTextMap[novel.status] || { label: '草稿', cls: 'bg-warning/10 text-warning' };
+  }
 
   const extractionStatusMap: Record<string, { label: string; cta: string; cls: string }> = {
     not_started: { label: '未提炼', cta: '进入提炼', cls: 'text-accent hover:text-accent-hover' },
@@ -145,8 +152,8 @@ export default function NovelsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0 ml-4">
-                          <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${statusTextMap[novel.status]?.cls || 'bg-ink-light/10 text-ink-light'}`}>
-                            {statusTextMap[novel.status]?.label || novel.status}
+                          <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${getNovelStatus(novel).cls}`}>
+                            {getNovelStatus(novel).label}
                           </span>
                           {canExtract && (
                             <button
@@ -184,8 +191,8 @@ export default function NovelsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${statusTextMap[novel.status]?.cls || 'bg-ink-light/10 text-ink-light'}`}>
-                          {statusTextMap[novel.status]?.label || novel.status}
+                        <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${getNovelStatus(novel).cls}`}>
+                          {getNovelStatus(novel).label}
                         </span>
                         <button onClick={(e) => handleDelete(e, novel.id, novel.title)}
                           className="text-xs text-error hover:text-error/80 transition-colors">
