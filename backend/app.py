@@ -1,5 +1,6 @@
 import sys
 import os
+import traceback
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from flask import Flask, session, request, jsonify
@@ -41,6 +42,27 @@ def add_cors_headers(response):
 @app.after_request
 def after_request(response):
     return add_cors_headers(response)
+
+
+def log_api_error(e):
+    traceback.print_exc()
+    print(f"[API Error] {type(e).__name__}: {str(e)}", file=sys.stderr)
+
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"success": False, "message": "接口不存在"}), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"success": False, "message": "请求方法不允许"}), 405
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    log_api_error(e)
+    return jsonify({"success": False, "message": "服务器内部错误"}), 500
 
 
 @app.route('/api/register', methods=['POST', 'OPTIONS'])
@@ -108,7 +130,8 @@ def api_novels():
         novels = get_user_novels(session['user_id'])
         return jsonify({"success": True, "novels": novels})
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取小说列表失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取小说列表失败"}), 500
 
 
 @app.route('/api/novels/create', methods=['POST', 'OPTIONS'])
@@ -123,7 +146,8 @@ def api_create_novel():
         novel_id = create_novel(session['user_id'], title)
         return jsonify({"success": True, "novelId": novel_id, "title": title})
     except Exception as e:
-        return jsonify({"success": False, "message": f"创建小说项目失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "创建小说项目失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>', methods=['GET', 'OPTIONS'])
@@ -138,7 +162,8 @@ def api_get_novel(novel_id):
             return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
         return jsonify({"success": True, "novel": novel})
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取小说详情失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取小说详情失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/save', methods=['POST', 'OPTIONS'])
@@ -153,7 +178,8 @@ def api_save_novel(novel_id):
         save_novel_status(novel_id, session['user_id'], 'imported')
         return jsonify({"success": True, "message": "小说已保存。"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "保存失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>', methods=['DELETE', 'OPTIONS'])
@@ -168,7 +194,8 @@ def api_delete_novel(novel_id):
         delete_novel(novel_id, session['user_id'])
         return jsonify({"success": True, "message": "小说已删除。"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "删除失败"}), 500
 
 
 @app.route('/api/novels/import-file', methods=['POST', 'OPTIONS'])
@@ -228,7 +255,8 @@ def api_import_file():
 
         return jsonify({"success": True, "novelId": novel_id, "title": novel_title})
     except Exception as e:
-        return jsonify({"success": False, "message": f"导入失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "导入失败"}), 500
 
 
 @app.route('/api/novels/import-link', methods=['POST', 'OPTIONS'])
@@ -251,12 +279,10 @@ def api_import_link():
         response = urllib.request.urlopen(req, timeout=15)
         html = response.read().decode('utf-8', errors='replace')
 
-        import re
         title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         novel_title = title_match.group(1).strip() if title_match else '导入小说'
         novel_title = re.sub(r'\s+', ' ', novel_title).strip()
 
-        # Try to extract content - look for common chapter patterns or main content
         body_match = re.search(r'<body[^>]*>(.*?)</body>', html, re.IGNORECASE | re.DOTALL)
         body_text = body_match.group(1) if body_match else html
         text_only = re.sub(r'<[^>]+>', '\n', body_text)
@@ -304,7 +330,8 @@ def api_import_link():
 
         return jsonify({"success": True, "novelId": novel_id, "title": novel_title})
     except Exception as e:
-        return jsonify({"success": False, "message": f"链接解析失败，请检查链接是否可访问，或改用文件导入。"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "链接解析失败，请检查链接是否可访问，或改用文件导入。"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/chapters', methods=['GET', 'POST', 'OPTIONS'])
@@ -325,7 +352,8 @@ def api_novel_chapters(novel_id):
             ).eq('novel_id', novel_id).eq('user_id', session['user_id']).order('chapter_index').execute()
             return jsonify({"success": True, "chapters": result.data or []})
         except Exception as e:
-            return jsonify({"success": False, "message": f"获取章节列表失败: {str(e)}"}), 500
+            log_api_error(e)
+            return jsonify({"success": False, "message": "获取章节列表失败"}), 500
 
     if request.method == 'POST':
         data = request.get_json() or {}
@@ -344,11 +372,11 @@ def api_novel_chapters(novel_id):
                 'parse_status': 'not_parsed',
             }).execute()
             chapter = ins.data[0]
-            # Update novel chapter_count
             db.table('novels').update({'chapter_count': next_index}).eq('id', novel_id).execute()
             return jsonify({"success": True, "chapter": chapter})
         except Exception as e:
-            return jsonify({"success": False, "message": f"创建章节失败: {str(e)}"}), 500
+            log_api_error(e)
+            return jsonify({"success": False, "message": "创建章节失败"}), 500
 
 
 @app.route('/api/chapters/<int:chapter_id>', methods=['GET', 'OPTIONS'])
@@ -366,7 +394,8 @@ def api_get_chapter(chapter_id):
             return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
         return jsonify({"success": True, "chapter": result.data[0]})
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取章节失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取章节失败"}), 500
 
 
 @app.route('/api/chapters/<int:chapter_id>/save', methods=['POST', 'OPTIONS'])
@@ -397,7 +426,8 @@ def api_save_chapter(chapter_id):
         db.table('chapters').update(update_data).eq('id', chapter_id).execute()
         return jsonify({"success": True, "message": "章节已保存。"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "保存失败"}), 500
 
 
 def _parse_chapters_for_extract(db, chapter_rows):
@@ -483,7 +513,8 @@ def api_parse_single_chapter(chapter_id):
             "wordCount": parsed['wordCount'],
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"识别失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "识别失败"}), 500
 
 
 @app.route('/api/chapters/<int:chapter_id>/extract', methods=['POST', 'OPTIONS'])
@@ -512,11 +543,9 @@ def api_extract_single_chapter(chapter_id):
         chapter = owned.data[0]
         novel_id = chapter['novel_id']
 
-        # 题目允许章节归属小说外的额外校验，这里二次确认小说也在当前用户名下
         if not check_novel_ownership(novel_id, session['user_id']):
             return jsonify({"success": False, "message": "无权限操作该章节。"}), 404
 
-        # 1) 如果带了 title / content（章节编辑页提炼入口会传），先保存
         update_payload = {}
         if 'title' in data and (data.get('title') or '').strip():
             update_payload['title'] = data['title'].strip()
@@ -528,16 +557,16 @@ def api_extract_single_chapter(chapter_id):
             try:
                 db.table('chapters').update(update_payload).eq('id', chapter_id).execute()
             except Exception as e:
-                return jsonify({"success": False, "message": "章节保存失败，请稍后重试。", "stage": "save", "detail": str(e)}), 500
+                log_api_error(e)
+                return jsonify({"success": False, "message": "章节保存失败，请稍后重试。", "stage": "save"}), 500
             chapter = {**chapter, **update_payload}
 
-        # 2) 识别前置：复用 _parse_chapters_for_extract
         try:
             success_count, _fail_count, errors = _parse_chapters_for_extract(db, [chapter])
         except Exception as e:
-            return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse", "detail": str(e)}), 500
+            log_api_error(e)
+            return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse"}), 500
         if success_count == 0:
-            # 单章识别失败，明确告知用户原因（不显示"识别成功"）
             return jsonify({
                 "success": False,
                 "message": "章节内容处理失败，请检查章节正文后重试。",
@@ -548,7 +577,6 @@ def api_extract_single_chapter(chapter_id):
 
         _advance_novel_status_after_parse(db, novel_id, session['user_id'])
 
-        # 3) 触发小说级提炼
         success, message, ai_result = run_extraction(novel_id, session['user_id'])
         extraction = get_extraction(novel_id, session['user_id'])
         return jsonify({
@@ -562,7 +590,8 @@ def api_extract_single_chapter(chapter_id):
             "errorMessage": extraction.get('error_message') if extraction else (None if success else message),
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"提炼失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "提炼失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/chapters/batch-parse', methods=['POST', 'OPTIONS'])
@@ -612,7 +641,8 @@ def api_batch_parse_chapters(novel_id):
             msg += f"，失败：{fail_count}"
         return jsonify({"success": True, "message": msg, "errors": errors})
     except Exception as e:
-        return jsonify({"success": False, "message": f"批量识别失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "批量识别失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/chapters/extract', methods=['POST', 'OPTIONS'])
@@ -646,13 +676,13 @@ def api_batch_extract_chapters(novel_id):
         if not chapters_result.data:
             return jsonify({"success": False, "message": "无权限操作该章节。"}), 404
         if len(chapters_result.data) != len(set(chapter_ids)):
-            # 部分 id 不属于当前用户/小说，视为权限问题
             return jsonify({"success": False, "message": "无权限操作该章节。"}), 404
 
         try:
             success_count, fail_count, errors = _parse_chapters_for_extract(db, chapters_result.data)
         except Exception as e:
-            return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse", "detail": str(e)}), 500
+            log_api_error(e)
+            return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse"}), 500
         if success_count == 0:
             return jsonify({
                 "success": False,
@@ -680,7 +710,8 @@ def api_batch_extract_chapters(novel_id):
             "errorMessage": extraction.get('error_message') if extraction else (None if success else message),
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"提炼失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "提炼失败"}), 500
 
 
 @app.route('/api/chapters/<int:chapter_id>/delete', methods=['POST', 'OPTIONS'])
@@ -700,7 +731,8 @@ def api_delete_chapter(chapter_id):
         db.table('novels').update({'chapter_count': len(remaining.data or [])}).eq('id', novel_id).execute()
         return jsonify({"success": True, "message": "章节已删除。"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "删除失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/chapters/delete', methods=['POST', 'OPTIONS'])
@@ -727,7 +759,8 @@ def api_batch_delete_chapters(novel_id):
         db.table('novels').update({'chapter_count': len(remaining.data or [])}).eq('id', novel_id).execute()
         return jsonify({"success": True, "message": f"已删除 {len(valid_ids)} 个章节。"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"批量删除失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "批量删除失败"}), 500
 
 
 @app.route('/api/history', methods=['GET', 'OPTIONS'])
@@ -740,7 +773,8 @@ def api_history():
         records = get_user_novels_with_records(session['user_id'])
         return jsonify({"success": True, "records": records})
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取记录失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取记录失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/extract', methods=['POST', 'OPTIONS'])
@@ -755,7 +789,6 @@ def api_extract_novel(novel_id):
         if not check_novel_ownership(novel_id, session['user_id']):
             return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
 
-        # 若当前小说还没有任何 parsed 章节，先把全部章节跑一遍识别前置（合并识别+提炼）
         db = get_db()
         parsed_count_res = db.table('chapters').select('id', count='exact').eq(
             'novel_id', novel_id
@@ -768,7 +801,8 @@ def api_extract_novel(novel_id):
                 try:
                     _parse_chapters_for_extract(db, all_chapters.data)
                 except Exception as e:
-                    return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse", "detail": str(e)}), 500
+                    log_api_error(e)
+                    return jsonify({"success": False, "message": "章节内容处理失败，请检查章节正文后重试。", "stage": "parse"}), 500
                 _advance_novel_status_after_parse(db, novel_id, session['user_id'])
 
         success, message, ai_result = run_extraction(novel_id, session['user_id'])
@@ -782,7 +816,8 @@ def api_extract_novel(novel_id):
             "errorMessage": extraction.get('error_message') if extraction else (None if success else message),
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"小说提炼失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "小说提炼失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/extraction', methods=['GET', 'OPTIONS'])
@@ -791,11 +826,33 @@ def api_get_extraction(novel_id):
     if request.method == 'OPTIONS':
         return jsonify({})
     from src.novel_service import check_novel_ownership
-    from src.extraction_service import get_extraction
+    from src.extraction_service import get_extraction, get_saved_chapter_extraction
+    from src.db import get_db
     try:
         if not check_novel_ownership(novel_id, session['user_id']):
             return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
         extraction = get_extraction(novel_id, session['user_id'])
+
+        has_saved = False
+        saved_json = None
+        try:
+            db = get_db()
+            chapters = db.table('chapters').select('id').eq('novel_id', novel_id).eq('user_id', session['user_id']).execute()
+            if chapters.data:
+                chapter_ids = [c['id'] for c in chapters.data]
+                saved = db.table('chapter_extractions').select('extraction_json').in_('chapter_id', chapter_ids).eq('user_id', session['user_id']).execute()
+                if saved.data:
+                    has_saved = True
+                    saved_json = saved.data[0].get('extraction_json')
+                    if isinstance(saved_json, str):
+                        import json as _json
+                        try:
+                            saved_json = _json.loads(saved_json)
+                        except Exception:
+                            saved_json = None
+        except Exception:
+            pass
+
         if not extraction:
             return jsonify({
                 "success": True,
@@ -803,6 +860,8 @@ def api_get_extraction(novel_id):
                 "aiResult": None,
                 "userResult": None,
                 "errorMessage": None,
+                "hasSavedChapterData": has_saved,
+                "savedChapterJson": saved_json,
             })
         return jsonify({
             "success": True,
@@ -810,9 +869,12 @@ def api_get_extraction(novel_id):
             "aiResult": extraction.get('ai_result_json'),
             "userResult": extraction.get('user_result_json'),
             "errorMessage": extraction.get('error_message'),
+            "hasSavedChapterData": has_saved,
+            "savedChapterJson": saved_json,
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取提炼结果失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取提炼结果失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/extraction/save', methods=['POST', 'OPTIONS'])
@@ -835,7 +897,35 @@ def api_save_extraction(novel_id):
         save_user_result(novel_id, session['user_id'], user_result)
         return jsonify({"success": True, "message": "提炼结果已保存。", "status": "confirmed"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "保存失败"}), 500
+
+
+@app.route('/api/chapters/<int:chapter_id>/extraction/save', methods=['POST', 'OPTIONS'])
+@login_required
+def api_save_chapter_extraction(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json()
+    if not data or 'extractionJson' not in data:
+        return jsonify({"success": False, "message": "请求数据为空"}), 400
+    extraction_json = data.get('extractionJson')
+    if not isinstance(extraction_json, dict):
+        return jsonify({"success": False, "message": "extractionJson 必须是对象"}), 400
+
+    from src.db import get_db
+    from src.extraction_service import save_chapter_extraction
+    try:
+        db = get_db()
+        chapter = db.table('chapters').select('id, novel_id').eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not chapter.data:
+            return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
+        novel_id = chapter.data[0]['novel_id']
+        save_chapter_extraction(chapter_id, session['user_id'], novel_id, extraction_json)
+        return jsonify({"success": True, "message": "章节提炼结果已保存。"})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({"success": False, "message": "保存失败"}), 500
 
 
 @app.route('/api/novels/<int:novel_id>/source-ref', methods=['GET', 'OPTIONS'])
@@ -859,7 +949,8 @@ def api_source_ref(novel_id):
             return jsonify({"success": False, "message": "未找到对应章节"}), 404
         return jsonify({"success": True, **ref})
     except Exception as e:
-        return jsonify({"success": False, "message": f"获取原文依据失败: {str(e)}"}), 500
+        log_api_error(e)
+        return jsonify({"success": False, "message": "获取原文依据失败"}), 500
 
 
 if __name__ == '__main__':
