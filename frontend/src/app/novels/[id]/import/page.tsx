@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ConfirmModal from '@/app/novels/ConfirmModal';
+import Sidebar from '@/components/Sidebar';
 
 function escapeHtml(text: string) {
   const d = document.createElement('div');
@@ -13,7 +14,7 @@ function escapeHtml(text: string) {
 }
 
 export default function NovelImportPage() {
-  const { username, isLoading, logout } = useAuth();
+  const { username, isLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const novelId = Number(params.id);
@@ -193,11 +194,6 @@ export default function NovelImportPage() {
     setSaveTimers(prev => ({ ...prev, [index]: timer }));
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
-
   async function handleSave() {
     try {
       const data = await api.saveNovel(novelId);
@@ -247,29 +243,10 @@ export default function NovelImportPage() {
   if (!username) return null;
 
   return (
-    <div className="flex-1 flex flex-col">
-      <header className="bg-card border-b border-border">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-serif font-bold text-lg text-ink">Novel2Script AI</span>
-            <button onClick={() => router.push('/novels')} className="text-sm text-ink-light hover:text-ink transition-colors">
-              我的小说
-            </button>
-            <span className="text-sm text-accent font-medium">小说导入</span>
-            <button onClick={() => router.push('/history')} className="text-sm text-ink-light hover:text-ink transition-colors">
-              历史记录
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            <button onClick={handleSave} className="text-sm text-success hover:text-success/80 transition-colors">保存</button>
-            <button onClick={handleDeleteNovel} className="text-sm text-error hover:text-error/80 transition-colors">删除</button>
-            <span className="text-sm text-ink-light">{username}</span>
-            <button onClick={handleLogout} className="text-sm text-ink-light hover:text-error transition-colors">退出</button>
-          </div>
-        </div>
-      </header>
+    <div className="flex-1 flex">
+      <Sidebar />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8 space-y-6">
+      <main className="flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
         <div>
           <h2 className="text-xl font-serif font-bold text-ink">小说导入与章节识别</h2>
           <p className="text-sm text-ink-light mt-1">粘贴或上传小说正文，自动识别章节并统计字数。</p>

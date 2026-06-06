@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
+import Sidebar from '@/components/Sidebar';
 
 export default function HistoryPage() {
-  const { username, isLoading, logout } = useAuth();
+  const { username, isLoading } = useAuth();
   const router = useRouter();
   const [records, setRecords] = useState<api.HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,11 +29,6 @@ export default function HistoryPage() {
     }
   }, [username]);
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
-
   const inputTypeMap: Record<string, string> = {
     paste: '粘贴',
     txt_upload: '文件上传',
@@ -49,32 +45,10 @@ export default function HistoryPage() {
   if (!username) return null;
 
   return (
-    <div className="flex-1 flex flex-col">
-      <header className="bg-card border-b border-border">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-serif font-bold text-lg text-ink">Novel2Script AI</span>
-            <button
-              onClick={() => router.push('/novels')}
-              className="text-sm text-ink-light hover:text-ink transition-colors"
-            >
-              小说导入
-            </button>
-            <span className="text-sm text-accent font-medium">历史记录</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-ink-light">{username}</span>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-ink-light hover:text-error transition-colors"
-            >
-              退出
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="flex-1 flex">
+      <Sidebar />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
+      <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <h2 className="text-xl font-serif font-bold text-ink mb-6">我的导入与识别记录</h2>
 
         {loading ? (

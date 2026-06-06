@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ConfirmModal from './ConfirmModal';
+import Sidebar from '@/components/Sidebar';
 
 export default function NovelsPage() {
-  const { username, isLoading, logout } = useAuth();
+  const { username, isLoading } = useAuth();
   const router = useRouter();
   const [novels, setNovels] = useState<api.NovelItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,11 +70,6 @@ export default function NovelsPage() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
-
   const statusTextMap: Record<string, { label: string; cls: string }> = {
     draft: { label: '草稿', cls: 'bg-warning/10 text-warning' },
     imported: { label: '已保存', cls: 'bg-success/10 text-success' },
@@ -104,32 +100,10 @@ export default function NovelsPage() {
   if (!username) return null;
 
   return (
-    <div className="flex-1 flex flex-col">
-      <header className="bg-card border-b border-border">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-serif font-bold text-lg text-ink">Novel2Script AI</span>
-            <span className="text-sm text-accent font-medium">我的小说</span>
-            <button
-              onClick={() => router.push('/history')}
-              className="text-sm text-ink-light hover:text-ink transition-colors"
-            >
-              历史记录
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-ink-light">{username}</span>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-ink-light hover:text-error transition-colors"
-            >
-              退出
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="flex-1 flex">
+      <Sidebar />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
+      <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-serif font-bold text-ink">我的小说</h2>
           <button
