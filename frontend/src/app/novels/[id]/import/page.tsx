@@ -285,7 +285,7 @@ export default function NovelImportPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="请输入小说标题"
+              placeholder="请输入标题"
               maxLength={255}
               className="w-full px-3.5 py-2.5 bg-paper border border-border rounded-lg text-sm text-ink placeholder:text-ink-light/50 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-colors"
             />
