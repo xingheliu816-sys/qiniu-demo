@@ -113,6 +113,39 @@ Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大
 47. 用户默认 Schema 设置：通过 `user_schema_preferences` 偏好表存储
 48. 侧边栏导航：全局统一侧边栏（我的小说 / 历史记录 / YAML Schema 规则库）
 
+### 本次章节提炼结果编辑能力增强（本次新增）
+
+43. 章节提炼结果独立存储，支持逐章保存提炼结果
+44. 新增 `chapter_extractions` 表，与小说级提炼结果分离，避免相互覆盖
+45. 章节提炼结果保存接口 `POST /api/chapters/<id>/extraction/save`，接收 JSONB 格式的提炼结果
+46. 章节提炼结果与章节一一对应（UNIQUE 约束），多次保存自动覆盖
+47. 章节提炼结果编辑页面增加保存按钮，保存后状态更新为编辑完成
+48. 章节列表页新增每章提炼结果状态显示（已编辑 / 未编辑）
+49. 章节提炼结果支持独立查看，不依赖小说级提炼页面
+50. 章节提炼编辑保存时校验 JSONB 格式，格式错误返回明确提示
+51. 章节提炼结果保存失败时保留前端编辑内容，不丢失用户输入
+52. 章节提炼结果编辑与小说级提炼结果编辑互不干扰，各自独立
+
+### 本次新增"查看小说整体提炼"入口（本次新增）
+
+65. 小说详情页新增"查看整体提炼"入口按钮，状态自适应显示
+66. 未提炼时显示"开始提炼"入口，已提炼时显示"查看提炼结果"
+67. 提炼失败时显示"重新提炼"入口，保留上次失败原因提示
+68. 整体提炼入口跳转到 `/novels/<id>/extraction` 页面
+69. 与章节级提炼入口并行，用户可选择单章编辑或整体查看
+70. 整体提炼入口权限隔离，只能查看当前用户小说的提炼结果
+71. 提炼状态变化时（如单章保存后）整体入口状态同步更新
+
+### 本次章节提炼查看错误修复（本次新增）
+
+72. 修复提炼结果查看时页面空白问题，添加通用错误页面组件 `PageError.tsx`
+73. 未登录访问提炼页面时重定向到登录页，不展示空白页面
+74. API 请求失败时展示友好错误提示而非空白页面
+75. 提炼结果 JSON 解析失败时兜底显示原始 JSON，不阻塞页面渲染
+76. 修复 HTTP 错误响应一致性：401 / 404 / 405 / 500 均返回 JSON 格式
+77. 未捕获异常兜底返回 JSON 错误响应，不暴露服务端内部细节
+78. 新增错误响应测试覆盖，确保错误处理路径可靠
+
 ## 赛题方向
 
 小说转剧本 AI 工具。
@@ -224,7 +257,8 @@ npm run dev
 │   ├── config.py              # 本地配置（不提交）
 │   ├── requirements.txt       # Python 依赖
 │   ├── sql/
-│   │   └── init.sql           # 数据库初始化脚本
+│   │   ├── init.sql           # 数据库初始化脚本
+│   │   └── migrate_chapter_extractions.sql  # 章节提炼结果表迁移
 │   ├── src/
 │   │   ├── __init__.py
 │   │   ├── db.py              # Supabase 客户端封装
@@ -234,11 +268,15 @@ npm run dev
 │   │   ├── record_service.py  # 数据保存与查询
 │   │   ├── ai_client.py       # AI 客户端，provider 可切换
 │   │   ├── extraction_service.py  # 小说提炼编排
-│   │   └── schema_service.py  # YAML Schema 规则库管理
+│   │   ├── schema_service.py  # YAML Schema 规则库管理
+│   │   └── html_cleaner.py    # 链接导入 HTML 清洗
 │   └── tests/
 │       ├── __init__.py
-│       ├── test_chapter_parser.py    # 章节识别测试
-│       └── test_extraction_service.py  # 提炼解析与 prompt 测试
+│       ├── test_chapter_parser.py         # 章节识别测试
+│       ├── test_extraction_service.py     # 提炼解析与 prompt 测试
+│       ├── test_html_cleaner.py           # HTML 清洗测试
+│       ├── test_link_import_encoding.py   # 链接导入编码测试
+│       └── test_error_responses.py        # 错误响应一致性测试
 ├── frontend/                  # Next.js 前端
 │   ├── package.json
 │   ├── src/
@@ -263,11 +301,12 @@ npm run dev
 │   │   │   ├── globals.css        # 全局样式
 │   │   │   └── page.tsx           # 首页（自动跳转）
 │   │   ├── components/
-│   │   │   └── Sidebar.tsx        # 全局侧边栏导航
+│   │   │   ├── Sidebar.tsx        # 全局侧边栏导航
+│   │   │   └── PageError.tsx      # 通用错误页面组件
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx    # 认证上下文
 │   │   └── lib/
-│   │       └── api.ts             # API 客户端封装（24 个导出函数）
+│   │       └── api.ts             # API 客户端封装（26 个导出函数）
 
 └── package.json               # 根目录脚本（转发前后端命令）
 ```
@@ -309,6 +348,7 @@ npm run dev
 | POST | `/api/chapters/<id>/parse` | 单章识别（合并入口的内部前置） |
 | POST | `/api/chapters/<id>/extract` | 单章合并入口：保存 → 识别前置 → 进入小说提炼 |
 | POST | `/api/chapters/<id>/delete` | 删除单章 |
+| POST | `/api/chapters/<id>/extraction/save` | 保存章节提炼结果 |
 | POST | `/api/novels/<id>/chapters/batch-parse` | 批量识别章节 |
 | POST | `/api/novels/<id>/chapters/extract` | 多章合并入口：识别前置 → 进入小说提炼 |
 | POST | `/api/novels/<id>/extract` | 触发小说提炼（无 parsed 章节时自动前置） |
@@ -338,12 +378,15 @@ npm run dev
 
 ```bash
 cd backend
-python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
+python -m unittest tests.test_chapter_parser tests.test_extraction_service tests.test_html_cleaner tests.test_link_import_encoding tests.test_error_responses -v
 ```
 
-共 27 条测试：
+共 56 条测试：
 - `test_chapter_parser`：16 条（章节识别、字数统计、内容校验）
 - `test_extraction_service`：11 条（25 字段 schema、JSON 解析兜底、prompt 构造）
+- `test_html_cleaner`：16 条（编码探测、正文抽取、chrome 清洗、VIP 检测、全链路）
+- `test_link_import_encoding`：8 条（编码检测与解码）
+- `test_error_responses`：5 条（401/404/405/500 JSON 错误响应）
 
 ## 演示视频
 
@@ -370,8 +413,11 @@ python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
 
 ## 原创功能与复用说明
 
-- 原创内容：用户登录、小说项目管理、章节列表式管理（章节标题与正文绑定保存）、单章编辑、单章识别、批量识别、小说提炼流程、25 字段 JSON 中间层设计、AI 客户端封装、卡片编辑器、原文依据抽屉、YAML Schema 规则库（格式校验 / CRUD / 权限控制）、侧边栏导航等全部代码
+- 原创内容：用户登录、小说项目管理、章节列表式管理（章节标题与正文绑定保存）、单章编辑、单章识别、批量识别、小说提炼流程、25 字段 JSON 中间层设计、AI 客户端封装、卡片编辑器、原文依据抽屉、YAML Schema 规则库（格式校验 / CRUD / 权限控制）、侧边栏导航、章节提炼结果独立存储、链接导入 HTML 清洗、通用错误页面组件等全部代码
 - 复用内容：无
 
 > 本次章节操作与提炼入口改造未新增第三方依赖。
 > 本次提炼结果页面（下拉视图/自适应textarea/大元素折叠/小元素CRUD）、导入小说（文件/链接）改造未新增第三方依赖。
+> 本次章节提炼结果编辑能力增强未新增第三方依赖。
+> 本次章节提炼查看错误修复未新增第三方依赖。
+> 本次新增"查看小说整体提炼"入口未新增第三方依赖。
