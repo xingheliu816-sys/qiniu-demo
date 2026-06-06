@@ -179,6 +179,8 @@ cd backend
 python app.py
 ```
 
+> Windows 用户：若 `python app.py` 报 `exit code 9009`，是因为 PATH 中的 `python.exe` 是 Windows Store 占位符。请改用 `py app.py`（Python 启动器），或在「设置 → 应用 → 应用执行别名」中关闭 `python.exe` / `python3.exe` 的别名。`npm run dev` 已使用 `py`，无此问题。
+
 终端 2 — 启动前端（端口 3000）：
 
 ```bash
@@ -189,6 +191,15 @@ npm run dev
 ### 6. 访问
 
 浏览器打开 `http://localhost:3000`，注册账号后即可使用。
+
+> 若启动时提示 `Port 3000 is in use` 或 `Another next dev server is already running`，是上一次 dev 未退干净留下的孤儿进程。在 Windows 终端中查 PID 并清理：
+>
+> ```bash
+> netstat -ano | findstr :3000
+> taskkill /PID <PID> /F
+> ```
+>
+> 5000 端口同理。清理后重新 `npm run dev`。
 
 ## 项目结构
 
