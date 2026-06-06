@@ -563,8 +563,8 @@ export default function NovelExtractionPage() {
                   {allDisplaySections.map(({ key }) => (
                     <ExtractionCard
                       key={key}
-                      title={getSectionTitle(key)}
-                      subtitle={getSectionSubtitle(key)}
+                      title={getSectionTitle(key as string)}
+                      subtitle={getSectionSubtitle(key as string)}
                       value={editingResult[key] ?? (Array.isArray(aiResult?.[key]) ? [] : {})}
                       onChange={(next) => patchSection(key as keyof api.ExtractionResult, next as never)}
                       onOpenSourceRef={handleOpenSourceRef}
@@ -620,13 +620,13 @@ export default function NovelExtractionPage() {
                   {allDisplaySections.map(({ key, isCustom }) => (
                     <ExtractionCard
                       key={key}
-                      title={getSectionTitle(key)}
-                      subtitle={getSectionSubtitle(key)}
+                      title={getSectionTitle(key as string)}
+                      subtitle={getSectionSubtitle(key as string)}
                       value={chapterExtractionData?.[key] ?? (Array.isArray(aiResult?.[key]) ? [] : {})}
-                      onChange={(next) => patchChapterSection(key, next)}
+                      onChange={(next) => patchChapterSection(key as string, next)}
                       onOpenSourceRef={handleOpenSourceRef}
                       showDelete={isCustom}
-                      onDelete={isCustom ? () => deleteChapterSection(key) : undefined}
+                      onDelete={isCustom ? () => deleteChapterSection(key as string) : undefined}
                     />
                   ))}
                 </div>
