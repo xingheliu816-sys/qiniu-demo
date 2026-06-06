@@ -7,12 +7,14 @@ import * as api from '@/lib/api';
 import ConfirmModal from './ConfirmModal';
 import Sidebar from '@/components/Sidebar';
 import ImportForm from '@/components/ImportForm';
+import PageError from '@/components/PageError';
 
 export default function NovelsPage() {
   const { username, isLoading } = useAuth();
   const router = useRouter();
   const [novels, setNovels] = useState<api.NovelItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<unknown>(null);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [showImport, setShowImport] = useState(false);
@@ -26,11 +28,14 @@ export default function NovelsPage() {
   const loadNovels = useCallback(() => {
     if (!username) return;
     setLoading(true);
+    setPageError(null);
     api.getNovels()
       .then((data) => {
         if (data.success) setNovels(data.novels);
       })
-      .catch(() => {})
+      .catch((err) => {
+        setPageError(err);
+      })
       .finally(() => setLoading(false));
   }, [username]);
 
@@ -104,6 +109,10 @@ export default function NovelsPage() {
         <div className="animate-pulse text-ink-light font-serif text-lg">加载中...</div>
       </div>
     );
+  }
+
+  if (pageError) {
+    return <PageError error={pageError} onRetry={loadNovels} />;
   }
 
   if (!username) return null;

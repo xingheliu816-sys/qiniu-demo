@@ -1,62 +1,21 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-export class ApiError extends Error {
+export interface ApiError {
   code: string;
-  constructor(code: string, message: string) {
-    super(message);
-    this.code = code;
-    this.name = 'ApiError';
-  }
-}
-
-export function statusToCode(status: number): string {
-  const map: Record<number, string> = {
-    400: 'BAD_REQUEST',
-    401: 'UNAUTHORIZED',
-    403: 'FORBIDDEN',
-    404: 'NOT_FOUND',
-    405: 'METHOD_NOT_ALLOWED',
-    500: 'INTERNAL_ERROR',
-  };
-  return map[status] || 'UNKNOWN';
-}
-
-export function defaultMessageFor(status: number): string {
-  const map: Record<number, string> = {
-    400: '请求参数错误',
-    401: '未登录',
-    403: '无权限',
-    404: '资源不存在',
-    405: '请求方法不允许',
-    500: '服务器内部错误',
-  };
-  return map[status] || '未知错误';
+  message: string;
 }
 
 export function toApiError(error: unknown): ApiError {
-  if (error instanceof ApiError) {
-    return error;
-  }
   if (error && typeof error === 'object') {
     const e = error as Record<string, unknown>;
     if (typeof e.code === 'string' && typeof e.message === 'string') {
-      return new ApiError(e.code, e.message);
+      return { code: e.code, message: e.message };
     }
   }
   if (error instanceof Error) {
-    return new ApiError('UNKNOWN', error.message);
+    return { code: 'UNKNOWN', message: error.message };
   }
-  return new ApiError('UNKNOWN', '未知错误');
-}
-
-export function describeApiError(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `${error.code}: ${error.message}`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return '未知错误';
+  return { code: 'UNKNOWN', message: '未知错误' };
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -67,10 +26,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   const data = await res.json();
   if (!res.ok && !data.success) {
-    throw new ApiError(
-      statusToCode(res.status),
-      data.message || defaultMessageFor(res.status)
-    );
+    throw new Error(data.message || '请求失败');
   }
   return data as T;
 }
@@ -373,21 +329,9 @@ export interface ExtractionResponse {
   success: boolean;
   status: string;
   aiResult: ExtractionResult | null;
-  userResult: Record<string, unknown> | null;
+  userResult: ExtractionResult | null;
   errorMessage?: string | null;
   message?: string;
-  hasSavedChapterData?: boolean;
-  savedChapterJson?: Record<string, unknown> | null;
-}
-
-export interface ChapterExtractionResponse extends ExtractionResponse {
-  hasSavedChapterData: boolean;
-  savedChapterJson: Record<string, unknown> | null;
-}
-
-export interface SaveChapterExtractionResponse {
-  success: boolean;
-  message: string;
 }
 
 export interface SourceRefResponse {
@@ -415,13 +359,6 @@ export async function saveExtraction(novelId: number, userResult: ExtractionResu
   return request<{ success: boolean; message: string; status?: string }>(`/api/novels/${novelId}/extraction/save`, {
     method: 'POST',
     body: JSON.stringify({ userResult }),
-  });
-}
-
-export async function saveChapterExtraction(chapterId: number, extractionJson: Record<string, unknown>): Promise<SaveChapterExtractionResponse> {
-  return request<SaveChapterExtractionResponse>(`/api/chapters/${chapterId}/extraction/save`, {
-    method: 'POST',
-    body: JSON.stringify({ extractionJson }),
   });
 }
 
