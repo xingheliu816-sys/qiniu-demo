@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface ExtractionCardProps {
   title: string;
@@ -8,8 +8,8 @@ interface ExtractionCardProps {
   value: unknown;
   onChange: (next: unknown) => void;
   onOpenSourceRef?: (chapterId: number, startOffset: number, endOffset: number) => void;
-  onDeleteSection?: () => void;
   showDelete?: boolean;
+  onDelete?: () => void;
 }
 
 function asString(v: unknown): string {
@@ -57,8 +57,6 @@ function getItemLabel(item: Record<string, unknown>): string {
   return (item.name as string) || (item.title as string) || (item.summary as string) || (item.question as string) || (item.motif as string) || (item.event_name as string) || ((item.from && item.to) ? `${item.from} 与 ${item.to}` : '') || (item.content as string) || '';
 }
 
-// ============= 子组件 =============
-
 function AutoTextarea({ value, onChange, placeholder, className }: {
   value: string;
   onChange: (v: string) => void;
@@ -86,237 +84,11 @@ function AutoTextarea({ value, onChange, placeholder, className }: {
   );
 }
 
-function ConfirmDialog({ open, message, onConfirm, onCancel }: {
-  open: boolean;
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm text-ink">{message}</p>
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-border rounded-lg transition-colors"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-4 py-2 text-sm bg-error text-white rounded-lg hover:bg-error/90 transition-colors"
-          >
-            确认删除
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AddFieldDialog({ open, onConfirm, onCancel }: {
-  open: boolean;
-  onConfirm: (name: string, value: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [value, setValue] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setName('');
-      setValue('');
-    }
-  }, [open]);
-
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h4 className="text-sm font-bold text-ink">添加字段</h4>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-ink-light mb-1">字段名</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="如：summary"
-              className="w-full px-3 py-2 bg-paper border border-border rounded-lg text-sm text-ink focus:outline-none focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-ink-light mb-1">字段值（可选）</label>
-            <textarea
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="字段值内容"
-              className="w-full px-3 py-2 bg-paper border border-border rounded-lg text-sm text-ink focus:outline-none focus:border-accent resize-none"
-              rows={3}
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-border rounded-lg transition-colors"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (name.trim()) {
-                onConfirm(name.trim(), value);
-                setName('');
-                setValue('');
-              }
-            }}
-            disabled={!name.trim()}
-            className="px-4 py-2 text-sm bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
-          >
-            确认添加
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 数组段中每一项的可折叠卡片。 */
-function CollapsibleArrayItem({
-  item,
-  index,
-  renderSourceRefs,
-  onItemFieldChange,
-  onItemValueChange,
-  onRequestDelete,
-  onRequestAddField,
-  onRequestDeleteField,
-}: {
-  item: Record<string, unknown>;
-  index: number;
-  renderSourceRefs: (refs: SourceRefRow[]) => ReactNode;
-  onItemFieldChange: (key: string, v: string) => void;
-  onItemValueChange: (key: string, parsedValue: unknown) => void;
-  onRequestDelete: () => void;
-  onRequestAddField: () => void;
-  onRequestDeleteField: (key: string) => void;
-}) {
-  const [itemOpen, setItemOpen] = useState(true);
-  const label = getItemLabel(item);
-  const sourceRefs = extractSourceRefs(item);
-  const [delFieldKey, setDelFieldKey] = useState<string | null>(null);
-  return (
-    <div className="border border-border rounded-lg overflow-hidden bg-paper/30">
-      <div className="flex items-center justify-between px-3 py-2 bg-paper/50 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setItemOpen(o => !o)}
-          className="flex-1 text-left text-sm font-medium text-ink hover:text-accent transition-colors truncate"
-        >
-          {index + 1}. {label || `项目 ${index + 1}`}
-        </button>
-        <div className="flex items-center gap-2 shrink-0 ml-2">
-          <button
-            type="button"
-            onClick={() => setItemOpen(o => !o)}
-            className="text-xs text-ink-light hover:text-accent transition-colors"
-          >
-            {itemOpen ? '收起' : '展开'}
-          </button>
-          <button
-            type="button"
-            onClick={onRequestDelete}
-            className="text-xs text-error hover:text-error/80 transition-colors"
-          >
-            删除
-          </button>
-        </div>
-      </div>
-      {itemOpen && (
-        <div className="p-3 space-y-2">
-          {Object.entries(item).filter(([k]) => k !== 'source_refs').map(([key, fieldValue]) => {
-            if (typeof fieldValue === 'string') {
-              return (
-                <div key={key}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <label className="block text-xs text-ink-light">{key}</label>
-                    <button
-                      type="button"
-                      onClick={() => setDelFieldKey(key)}
-                      className="text-[10px] text-error/60 hover:text-error transition-colors"
-                    >
-                      删除
-                    </button>
-                  </div>
-                  <AutoTextarea
-                    value={fieldValue}
-                    onChange={(v) => onItemFieldChange(key, v)}
-                  />
-                </div>
-              );
-            }
-            return (
-              <div key={key}>
-                <div className="flex items-center justify-between mb-0.5">
-                  <label className="block text-xs text-ink-light">{key}</label>
-                  <button
-                    type="button"
-                    onClick={() => setDelFieldKey(key)}
-                    className="text-[10px] text-error/60 hover:text-error transition-colors"
-                  >
-                    删除
-                  </button>
-                </div>
-                <AutoTextarea
-                  value={asString(fieldValue)}
-                  onChange={(v) => onItemValueChange(key, parseJsonOrKeep(v))}
-                />
-              </div>
-            );
-          })}
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onRequestAddField}
-              className="text-xs text-accent hover:text-accent-hover transition-colors"
-            >
-              + 添加字段
-            </button>
-          </div>
-          {sourceRefs.length > 0 && renderSourceRefs(sourceRefs)}
-        </div>
-      )}
-      <ConfirmDialog
-        open={delFieldKey !== null}
-        message="确定要删除该字段吗？此操作不可恢复。"
-        onConfirm={() => {
-          if (delFieldKey) onRequestDeleteField(delFieldKey);
-          setDelFieldKey(null);
-        }}
-        onCancel={() => setDelFieldKey(null)}
-      />
-    </div>
-  );
-}
-
-// ============= 主组件 =============
-
-export default function ExtractionCard({ title, subtitle, value, onChange, onOpenSourceRef, onDeleteSection, showDelete }: ExtractionCardProps) {
+export default function ExtractionCard({ title, subtitle, value, onChange, onOpenSourceRef, showDelete, onDelete }: ExtractionCardProps) {
   const [viewMode, setViewMode] = useState<'form' | 'json'>('form');
   const [expanded, setExpanded] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
-  const [addFieldOpen, setAddFieldOpen] = useState(false);
-  const [addFieldForItem, setAddFieldForItem] = useState<number | null>(null);
-  const [deleteFieldKey, setDeleteFieldKey] = useState<string | null>(null);
-  const [jsonError, setJsonError] = useState('');
-  const [showDeleteSection, setShowDeleteSection] = useState(false);
+  const [addingField, setAddingField] = useState<string[] | null>(null);
 
   const valueIsObject = isObjectRecord(value);
   const valueIsObjectArray = isObjectArray(value);
@@ -343,8 +115,6 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
       onChange([...(value as Record<string, unknown>[]), template]);
     } else if (valueIsStringArray) {
       onChange([...(value as string[]), '']);
-    } else {
-      onChange([]);
     }
   }
 
@@ -361,43 +131,16 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
     onChange((value as string[]).map((item, i) => i === index ? nextValue : item));
   }
 
-  function handleAddField(name: string, fieldValue: string) {
-    if (addFieldForItem !== null && valueIsObjectArray) {
-      const next = (value as Record<string, unknown>[]).map((item, i) =>
-        i === addFieldForItem ? { ...item, [name]: parseJsonOrKeep(fieldValue) } : item
-      );
-      onChange(next);
-      setAddFieldForItem(null);
-    } else if (valueIsObject) {
-      onChange({ ...value, [name]: parseJsonOrKeep(fieldValue) });
-    }
-  }
-
-  function handleDeleteField(key: string) {
-    if (addFieldForItem !== null && valueIsObjectArray) {
-      const next = (value as Record<string, unknown>[]).map((item, i) => {
-        if (i !== addFieldForItem) return item;
-        const { [key]: _, ...rest } = item;
-        return rest;
-      });
-      onChange(next);
-    } else if (valueIsObject) {
-      const { [key]: _, ...rest } = value as Record<string, unknown>;
-      onChange(rest);
-    }
-  }
-
   function openAddFieldDialog() {
-    setAddFieldOpen(true);
-    setAddFieldForItem(null);
+    if (valueIsObject) {
+      const name = prompt('请输入字段名（英文，如 summary）：');
+      if (name && name.trim()) {
+        onChange({ ...value, [name.trim()]: '' });
+      }
+    }
   }
 
-  function openAddFieldForItem(index: number) {
-    setAddFieldForItem(index);
-    setAddFieldOpen(true);
-  }
-
-  const renderSourceRefs = (refs: SourceRefRow[]) => {
+  const renderSourceRefs = useCallback((refs: SourceRefRow[]) => {
     if (refs.length === 0) return null;
     return (
       <div className="flex flex-wrap gap-1.5 pt-1">
@@ -413,9 +156,9 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
         ))}
       </div>
     );
-  };
+  }, [onOpenSourceRef]);
 
-  const renderObjectFields = (obj: Record<string, unknown>, prefix?: string, onItemChange?: (path: string, v: string) => void): ReactNode => {
+  const renderObjectFields = useCallback((obj: Record<string, unknown>, prefix?: string, onItemChange?: (path: string, v: string) => void) => {
     const fields = Object.entries(obj).filter(([k]) => k !== 'source_refs');
     const sourceRefs = extractSourceRefs(obj);
     return (
@@ -425,19 +168,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
           if (typeof fieldValue === 'string') {
             return (
               <div key={key}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-ink-light">{key}</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteFieldKey(key);
-                      setAddFieldForItem(null);
-                    }}
-                    className="text-[10px] text-error/60 hover:text-error transition-colors"
-                  >
-                    删除
-                  </button>
-                </div>
+                <label className="block text-xs font-medium text-ink-light mb-1">{key}</label>
                 <AutoTextarea
                   value={fieldValue}
                   onChange={(v) => {
@@ -451,19 +182,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
           if (isObjectRecord(fieldValue)) {
             return (
               <div key={key}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-ink-light">{key}</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteFieldKey(key);
-                      setAddFieldForItem(null);
-                    }}
-                    className="text-[10px] text-error/60 hover:text-error transition-colors"
-                  >
-                    删除
-                  </button>
-                </div>
+                <label className="block text-xs font-medium text-ink-light mb-1">{key}</label>
                 <div className="ml-3 pl-3 border-l-2 border-border">
                   {renderObjectFields(fieldValue, fieldPath, (subKey, v) => {
                     onChange({ ...obj, [key]: { ...fieldValue, [subKey]: v } });
@@ -474,19 +193,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
           }
           return (
             <div key={key}>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-ink-light">{key}</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteFieldKey(key);
-                    setAddFieldForItem(null);
-                  }}
-                  className="text-[10px] text-error/60 hover:text-error transition-colors"
-                >
-                  删除
-                </button>
-              </div>
+              <label className="block text-xs font-medium text-ink-light mb-1">{key}</label>
               <AutoTextarea
                 value={asString(fieldValue)}
                 onChange={(v) => {
@@ -500,12 +207,74 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
         {sourceRefs.length > 0 && renderSourceRefs(sourceRefs)}
       </div>
     );
-  };
+  }, [onChange, renderSourceRefs]);
 
-  function handleJsonChange(text: string) {
-    setJsonError('');
-    onChange(parseJsonOrKeep(text));
-  }
+  const renderCollapsibleItem = useCallback((item: Record<string, unknown>, index: number, isNested: boolean) => {
+    const [itemOpen, setItemOpen] = useState(true);
+    const label = getItemLabel(item);
+    const sourceRefs = extractSourceRefs(item);
+    return (
+      <div key={index} className="border border-border rounded-lg overflow-hidden bg-paper/30">
+        <div className="flex items-center justify-between px-3 py-2 bg-paper/50 border-b border-border">
+          <button
+            type="button"
+            onClick={() => setItemOpen(o => !o)}
+            className="flex-1 text-left text-sm font-medium text-ink hover:text-accent transition-colors truncate"
+          >
+            {index + 1}. {label || `项目 ${index + 1}`}
+          </button>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <button
+              type="button"
+              onClick={() => setItemOpen(o => !o)}
+              className="text-xs text-ink-light hover:text-accent transition-colors"
+            >
+              {itemOpen ? '收起' : '展开'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(index)}
+              className="text-xs text-error hover:text-error/80 transition-colors"
+            >
+              删除
+            </button>
+          </div>
+        </div>
+        {itemOpen && (
+          <div className="p-3 space-y-2">
+            {Object.entries(item).filter(([k]) => k !== 'source_refs').map(([key, fieldValue]) => {
+              if (typeof fieldValue === 'string') {
+                return (
+                  <div key={key}>
+                    <label className="block text-xs text-ink-light mb-0.5">{key}</label>
+                    <AutoTextarea
+                      value={fieldValue}
+                      onChange={(v) => updateArrayItem(index, key, v)}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div key={key}>
+                  <label className="block text-xs text-ink-light mb-0.5">{key}</label>
+                  <AutoTextarea
+                    value={asString(fieldValue)}
+                    onChange={(v) => {
+                      const next = (value as Record<string, unknown>[]).map((it, i) =>
+                        i === index ? { ...it, [key]: parseJsonOrKeep(v) } : it
+                      );
+                      onChange(next);
+                    }}
+                  />
+                </div>
+              );
+            })}
+            {sourceRefs.length > 0 && renderSourceRefs(sourceRefs)}
+          </div>
+        )}
+      </div>
+    );
+  }, [value, onChange, renderSourceRefs]);
 
   return (
     <section className="bg-card border border-border rounded-xl overflow-hidden">
@@ -514,22 +283,19 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
         onClick={() => setExpanded(o => !o)}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-serif font-bold text-ink truncate">{title}</h3>
-            {showDelete && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setShowDeleteSection(true); }}
-                className="text-[10px] text-error/50 hover:text-error transition-colors shrink-0"
-                title="删除该模块"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+          <h3 className="text-base font-serif font-bold text-ink truncate">{title}</h3>
           {subtitle && <p className="text-xs text-ink-light mt-0.5 truncate">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {showDelete && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-xs text-error hover:text-error/80 transition-colors mr-1"
+            >
+              删除分区
+            </button>
+          )}
           <select
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as 'form' | 'json')}
@@ -538,13 +304,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
             <option value="form">表单视图</option>
             <option value="json">JSON 视图</option>
           </select>
-          <button
-            type="button"
-            onClick={() => setExpanded(o => !o)}
-            className="text-xs text-ink-light ml-1 cursor-pointer hover:text-accent transition-colors"
-          >
-            {expanded ? '收起' : '展开'}
-          </button>
+          <span className="text-xs text-ink-light ml-1">{expanded ? '收起' : '展开'}</span>
         </div>
       </header>
 
@@ -554,9 +314,8 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
             <div>
               <AutoTextarea
                 value={asString(value)}
-                onChange={handleJsonChange}
+                onChange={(v) => onChange(parseJsonOrKeep(v))}
               />
-              {jsonError && <p className="text-xs text-error mt-1">{jsonError}</p>}
             </div>
           ) : valueIsObject ? (
             <div className="space-y-2.5">
@@ -582,16 +341,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
                 if (typeof fieldValue === 'string') {
                   return (
                     <div key={key}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-xs font-medium text-ink-light">{key}</label>
-                        <button
-                          type="button"
-                          onClick={() => { setDeleteFieldKey(key); setAddFieldForItem(null); }}
-                          className="text-[10px] text-error/60 hover:text-error transition-colors"
-                        >
-                          删除
-                        </button>
-                      </div>
+                      <label className="block text-xs font-medium text-ink-light mb-1.5">{key}</label>
                       <AutoTextarea
                         value={fieldValue}
                         onChange={(v) => updateObjectField(key, v)}
@@ -601,16 +351,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
                 }
                 return (
                   <div key={key}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-ink-light">{key}</label>
-                      <button
-                        type="button"
-                        onClick={() => { setDeleteFieldKey(key); setAddFieldForItem(null); }}
-                        className="text-[10px] text-error/60 hover:text-error transition-colors"
-                      >
-                        删除
-                      </button>
-                    </div>
+                    <label className="block text-xs font-medium text-ink-light mb-1.5">{key}</label>
                     <AutoTextarea
                       value={asString(fieldValue)}
                       onChange={(v) => onChange({ ...value, [key]: parseJsonOrKeep(v) })}
@@ -633,27 +374,7 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
               {(value as Record<string, unknown>[]).length === 0 && (
                 <p className="text-sm text-ink-light italic">暂无内容。</p>
               )}
-              {(value as Record<string, unknown>[]).map((item, index) => (
-                <CollapsibleArrayItem
-                  key={index}
-                  item={item}
-                  index={index}
-                  renderSourceRefs={renderSourceRefs}
-                  onItemFieldChange={(key, v) => updateArrayItem(index, key, v)}
-                  onItemValueChange={(key, parsedValue) => {
-                    const next = (value as Record<string, unknown>[]).map((it, i) =>
-                      i === index ? { ...it, [key]: parsedValue } : it
-                    );
-                    onChange(next);
-                  }}
-                  onRequestDelete={() => setDeleteTarget(index)}
-                  onRequestAddField={() => openAddFieldForItem(index)}
-                  onRequestDeleteField={(key) => {
-                    setAddFieldForItem(index);
-                    setDeleteFieldKey(key);
-                  }}
-                />
-              ))}
+              {(value as Record<string, unknown>[]).map((item, index) => renderCollapsibleItem(item, index, false))}
               <button
                 type="button"
                 onClick={addArrayItem}
@@ -699,36 +420,27 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
             />
           )}
 
-          {/* 删除大模块确认 */}
-          <ConfirmDialog
-            open={showDeleteSection}
-            message="确定要删除该模块吗？模块内的内容也会被删除，此操作不可恢复。"
-            onConfirm={() => { setShowDeleteSection(false); onDeleteSection?.(); }}
-            onCancel={() => setShowDeleteSection(false)}
-          />
-
-          {/* 删除小元素确认 */}
-          <ConfirmDialog
-            open={deleteTarget !== null}
-            message="确定要删除该项吗？此操作不可恢复。"
-            onConfirm={() => { removeArrayItem(deleteTarget!); setDeleteTarget(null); }}
-            onCancel={() => setDeleteTarget(null)}
-          />
-
-          {/* 删除字段确认 */}
-          <ConfirmDialog
-            open={deleteFieldKey !== null}
-            message="确定要删除该字段吗？此操作不可恢复。"
-            onConfirm={() => { handleDeleteField(deleteFieldKey!); setDeleteFieldKey(null); }}
-            onCancel={() => setDeleteFieldKey(null)}
-          />
-
-          {/* 添加字段对话框 */}
-          <AddFieldDialog
-            open={addFieldOpen}
-            onConfirm={(name, fieldValue) => { handleAddField(name, fieldValue); setAddFieldOpen(false); }}
-            onCancel={() => { setAddFieldOpen(false); setAddFieldForItem(null); }}
-          />
+          {deleteTarget !== null && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
+              <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+                <p className="text-sm text-ink">确定要删除此项吗？删除后不可恢复。</p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-border rounded-lg transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => { removeArrayItem(deleteTarget); setDeleteTarget(null); }}
+                    className="px-4 py-2 text-sm bg-error text-white rounded-lg hover:bg-error/90 transition-colors"
+                  >
+                    确认删除
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

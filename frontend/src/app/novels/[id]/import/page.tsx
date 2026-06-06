@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import PageError from '@/components/PageError';
 
 const extractStatusLabel: Record<string, { label: string; cls: string }> = {
   not_parsed: { label: '未提炼', cls: 'bg-ink-light/10 text-ink-light' },
@@ -34,6 +35,7 @@ export default function NovelChaptersPage() {
   const [novelTitle, setNovelTitle] = useState('');
   const [chapters, setChapters] = useState<api.ChapterItem[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState<unknown>(null);
   const [multiMode, setMultiMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [processing, setProcessing] = useState(false);
@@ -48,17 +50,18 @@ export default function NovelChaptersPage() {
   const loadChapters = useCallback(async () => {
     if (!username || !novelId) return;
     setPageLoading(true);
+    setPageError(null);
     try {
       const detail = await api.getNovel(novelId);
       if (!detail.success || !detail.novel) {
-        showToast('小说项目不存在或无权访问', 'error');
+        setPageError({ code: 'NOT_FOUND', message: '小说项目不存在或无权访问' });
         return;
       }
       setNovelTitle(detail.novel.title);
       const chList = await api.getChapters(novelId);
       setChapters(chList.chapters || []);
-    } catch {
-      showToast('加载失败', 'error');
+    } catch (err) {
+      setPageError(err);
     } finally {
       setPageLoading(false);
     }
@@ -97,6 +100,19 @@ export default function NovelChaptersPage() {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(chapters.map(c => c.id)));
+    }
+  }
+
+  async function handleViewNovelExtraction() {
+    try {
+      const ext = await api.getExtraction(novelId);
+      if (ext.success) {
+        router.push(`/novels/${novelId}/extraction`);
+      } else {
+        showToast(ext.message || '该小说尚未进行整体提炼', 'error');
+      }
+    } catch {
+      showToast('获取提炼数据失败', 'error');
     }
   }
 
@@ -230,6 +246,10 @@ export default function NovelChaptersPage() {
     );
   }
 
+  if (pageError) {
+    return <PageError error={pageError} onRetry={loadChapters} />;
+  }
+
   if (!username) return null;
 
   const allParsedCount = chapters.filter(c => c.parse_status === 'parsed').length;
@@ -256,6 +276,12 @@ export default function NovelChaptersPage() {
               </button>
             )}
             <button
+              onClick={handleViewNovelExtraction}
+              className="text-sm px-3 py-1.5 rounded-lg border border-border text-ink-light hover:text-accent hover:border-accent/30 transition-colors"
+            >
+              查看小说整体提炼
+            </button>
+            <button
               onClick={handleAIBtnClick}
               disabled={processing || chapters.length === 0}
               className="text-sm px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 text-white transition-colors"
@@ -275,7 +301,7 @@ export default function NovelChaptersPage() {
 
         {pageLoading ? (
           <div className="animate-pulse text-ink-light font-serif text-lg text-center py-20">加载中...</div>
-        ) : chapters.length === 0 ? (
+        ) : (!chapters || chapters.length === 0) ? (
           <div className="bg-card border border-dashed border-border rounded-xl p-12 text-center">
             <p className="text-ink-light text-sm mb-4">还没有章节，点击下方按钮新增。</p>
           </div>
@@ -298,6 +324,11 @@ export default function NovelChaptersPage() {
 
             {chapters.map((ch) => {
               const st = extractStatusLabel[ch.parse_status] || extractStatusLabel.not_parsed;
+
+              let chapterBtnLabel = '提炼';
+              if (ch.parse_status === 'parsed') chapterBtnLabel = '查看提炼';
+              else if (ch.parse_status === 'parse_failed') chapterBtnLabel = '重新提炼';
+
               return (
                 <div
                   key={ch.id}
@@ -330,7 +361,7 @@ export default function NovelChaptersPage() {
                       disabled={processing}
                       className="text-xs text-accent hover:text-accent-hover disabled:opacity-50 transition-colors"
                     >
-                      提炼
+                      {chapterBtnLabel}
                     </button>
                     <button
                       onClick={() => confirmSingleDelete(ch.id)}

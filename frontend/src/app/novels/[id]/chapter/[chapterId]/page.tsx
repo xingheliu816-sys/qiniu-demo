@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import PageError from '@/components/PageError';
 
 function showToast(message: string, type: 'success' | 'error') {
   const existing = document.getElementById('toast');
@@ -33,6 +34,8 @@ export default function ChapterEditPage() {
   const [parseStatus, setParseStatus] = useState('not_parsed');
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [pageError, setPageError] = useState<unknown>(null);
+  const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !username) router.replace('/login');
@@ -40,6 +43,8 @@ export default function ChapterEditPage() {
 
   const loadChapter = useCallback(async () => {
     if (!username) return;
+    setPageLoading(true);
+    setPageError(null);
     try {
       const detail = await api.getNovel(novelId);
       if (detail.success && detail.novel) {
@@ -52,10 +57,12 @@ export default function ChapterEditPage() {
         setContent(ch.chapter.content || '');
         setParseStatus(ch.chapter.parse_status);
       } else {
-        showToast('章节不存在或无权访问', 'error');
+        setPageError({ code: 'NOT_FOUND', message: '章节不存在或无权访问' });
       }
-    } catch {
-      showToast('加载失败', 'error');
+    } catch (err) {
+      setPageError(err);
+    } finally {
+      setPageLoading(false);
     }
   }, [username, novelId, chapterId]);
 
@@ -115,12 +122,16 @@ export default function ChapterEditPage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading || pageLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="animate-pulse text-ink-light font-serif text-lg">加载中...</div>
       </div>
     );
+  }
+
+  if (pageError) {
+    return <PageError error={pageError} onRetry={loadChapter} />;
   }
 
   if (!username) return null;
