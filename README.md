@@ -2,9 +2,9 @@
 
 ## 项目简介
 
-Novel2Script AI 是一个小说转剧本工具。当前阶段实现：用户登录、小说导入与章节识别、小说提炼（AI 辅助）。
+Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大功能：**用户登录与小说导入章节识别**、**AI 小说提炼**（故事骨干 JSON 中间层）、**YAML Schema 规则库**（为后续 YAML 剧本草稿生成提供规则约束）。
 
-用户可以通过粘贴正文或上传 `.txt` 文件导入小说，系统自动识别章节标题、统计字数，并将导入与识别记录保存到 Supabase 云数据库。完成章节识别后，可进一步使用 AI（DeepSeek）从已识别章节中提炼故事骨干（核心故事、角色、关键事件、戏剧冲突、改编风险等 25 个分区），结果以可编辑 JSON 中间层形式保存，为后续 YAML 剧本草稿生成做准备。
+用户可以通过粘贴正文或上传 `.txt` 文件导入小说，系统自动识别章节标题、统计字数，并将导入与识别记录保存到 Supabase 云数据库。完成章节识别后，可进一步使用 AI（DeepSeek）从已识别章节中提炼故事骨干（核心故事、角色、关键事件、戏剧冲突、改编风险等 25 个分区），结果以可编辑 JSON 中间层形式保存。YAML Schema 规则库提供系统默认模板及用户自定义 Schema 管理，为后续 YAML 剧本草稿生成做规则准备。
 
 ## 技术栈
 
@@ -22,13 +22,14 @@ Novel2Script AI 是一个小说转剧本工具。当前阶段实现：用户登�
 | Flask | Web 服务、路由、API 接口、session 管理 | 后端 (`backend/`) |
 | supabase | Supabase Python 客户端，连接与操作 PostgreSQL | 后端 (`backend/`) |
 | requests | HTTP 客户端，调用 DeepSeek / Gemini API | 后端 (`backend/`) |
+| PyYAML | YAML 格式解析与校验 | 后端 (`backend/`) |
 | Next.js | React 全栈框架，App Router 路由 | 前端 (`frontend/`) |
 | React | UI 组件框架 | 前端 (`frontend/`) |
 | TypeScript | 类型安全的 JavaScript | 前端 (`frontend/`) |
 | Tailwind CSS | 原子化 CSS 样式框架 | 前端 (`frontend/`) |
 | concurrently | 同时启动前后端开发服务器 | 前端 (`frontend/`) |
 
-本次「小说提炼」功能新增的第三方依赖只有 `requests`（Python HTTP 客户端），用于调用 DeepSeek Chat Completions API。
+功能 2「小说提炼」新增 `requests`（调用 DeepSeek Chat Completions API）；功能 3「YAML Schema 规则库」新增 `PyYAML`（YAML 格式校验）。
 
 ## 第三方 API / 服务说明
 
@@ -90,6 +91,17 @@ Novel2Script AI 是一个小说转剧本工具。当前阶段实现：用户登�
 38. 提炼失败可重试，重试覆盖 ai_result_json
 39. parse_ai_response 兜底机制：JSON 直接解析 → Markdown 围栏剥离 → 平衡括号扫描 → 全空结构兜底
 40. JSON 中间层为后续 YAML 剧本草稿生成预留数据基础
+
+### 功能 3：YAML Schema 规则库
+
+41. YAML Schema 规则库设计：系统默认 Schema 与用户自定义 Schema 分类管理
+42. 系统默认 Schema（小说提炼默认模板）：仅可查看与复制，不可编辑与删除
+43. 用户 Schema 完全隔离：每个用户只能查看/编辑/删除自己的 Schema
+44. Schema 新建页面：支持手动输入或上传 `.yaml` / `.json` / `.txt` 文件
+45. Schema 编辑与删除：编辑保存时进行 YAML/JSON 格式校验，删除需二次确认
+46. Schema 复制：支持从系统默认 Schema 或自有 Schema 复制为新 Schema
+47. 用户默认 Schema 设置：通过 `user_schema_preferences` 偏好表存储
+48. 侧边栏导航：全局统一侧边栏（我的小说 / 历史记录 / YAML Schema 规则库）
 
 ## 赛题方向
 
@@ -211,32 +223,42 @@ npm run dev
 │   │   ├── novel_service.py   # 小说项目服务
 │   │   ├── record_service.py  # 数据保存与查询
 │   │   ├── ai_client.py       # AI 客户端，provider 可切换
-│   │   └── extraction_service.py  # 小说提炼编排
+│   │   ├── extraction_service.py  # 小说提炼编排
+│   │   └── schema_service.py  # YAML Schema 规则库管理
 │   └── tests/
 │       ├── __init__.py
 │       ├── test_chapter_parser.py    # 章节识别测试
 │       └── test_extraction_service.py  # 提炼解析与 prompt 测试
 ├── frontend/                  # Next.js 前端
 │   ├── package.json
-│   ├── src/app/
-│   │   ├── login/             # 登录页
-│   │   ├── register/          # 注册页
-│   │   ├── novels/            # 我的小说列表页
-│   │   │   ├── ConfirmModal.tsx
-│   │   │   └── [id]/
-│   │   │       ├── import/    # 小说导入与章节识别页
-│   │   │       └── extraction/  # 小说提炼页与卡片编辑器
-│   │   │           ├── page.tsx
-│   │   │           ├── ExtractionCard.tsx
-│   │   │           └── SourceRefDrawer.tsx
-│   │   ├── history/           # 历史记录页
-│   │   ├── layout.tsx         # 根布局
-│   │   ├── globals.css        # 全局样式
-│   │   └── page.tsx           # 首页（自动跳转）
-│   ├── context/
-│   │   └── AuthContext.tsx    # 认证上下文
-│   └── lib/
-│       └── api.ts             # API 客户端封装
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── login/             # 登录页
+│   │   │   ├── register/          # 注册页
+│   │   │   ├── novels/            # 我的小说列表页
+│   │   │   │   ├── ConfirmModal.tsx   # 删除确认弹窗
+│   │   │   │   └── [id]/
+│   │   │   │       ├── import/    # 小说导入与章节识别页
+│   │   │   │       └── extraction/  # 小说提炼页与卡片编辑器
+│   │   │   │           ├── page.tsx
+│   │   │   │           ├── ExtractionCard.tsx
+│   │   │   │           └── SourceRefDrawer.tsx
+│   │   │   ├── history/           # 历史记录页
+│   │   │   ├── schemas/           # YAML Schema 规则库
+│   │   │   │   ├── page.tsx       # 列表页
+│   │   │   │   ├── new/page.tsx   # 新建页
+│   │   │   │   ├── [id]/page.tsx  # 详情页
+│   │   │   │   └── [id]/edit/page.tsx  # 编辑页
+│   │   │   ├── layout.tsx         # 根布局
+│   │   │   ├── globals.css        # 全局样式
+│   │   │   └── page.tsx           # 首页（自动跳转）
+│   │   ├── components/
+│   │   │   └── Sidebar.tsx        # 全局侧边栏导航
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx    # 认证上下文
+│   │   └── lib/
+│   │       └── api.ts             # API 客户端封装（24 个导出函数）
+
 └── package.json               # 根目录脚本（转发前后端命令）
 ```
 
@@ -251,6 +273,10 @@ npm run dev
 | `/novels/[id]/import` | 小说导入与章节识别页面 | 是 |
 | `/novels/[id]/extraction` | 小说提炼页面 | 是 |
 | `/history` | 我的导入与识别记录 | 是 |
+| `/schemas` | YAML Schema 规则库列表 | 是 |
+| `/schemas/new` | 新建 Schema | 是 |
+| `/schemas/[id]` | Schema 详情页 | 是 |
+| `/schemas/[id]/edit` | 编辑 Schema | 是 |
 
 ## API 接口
 
@@ -272,6 +298,13 @@ npm run dev
 | POST | `/api/novels/<id>/extraction/save` | 保存用户编辑后的提炼结果 |
 | GET  | `/api/novels/<id>/source-ref` | 按 chapter_id + offset 取原文片段 |
 | GET  | `/api/history` | 获取历史记录 |
+| GET  | `/api/schemas` | 获取 Schema 列表（含系统默认 + 用户 Schema） |
+| GET  | `/api/schemas/<id>` | 获取 Schema 详情 |
+| POST | `/api/schemas/create` | 创建 Schema |
+| POST | `/api/schemas/<id>/update` | 更新 Schema |
+| POST | `/api/schemas/<id>/delete` | 删除 Schema |
+| POST | `/api/schemas/<id>/copy` | 复制 Schema |
+| POST | `/api/schemas/set-default` | 设置/取消用户的默认 Schema |
 
 ## 章节识别支持格式
 
@@ -294,9 +327,9 @@ python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
 
 ## 演示视频
 
-> ⚠️ 此项目为参赛作品，演示视频需上传至 bilibili 或其他可公开访问平台，并在 README 中提供可播放链接。
+> 此项目为参赛作品。
 
-演示视频链接：待补充
+演示视频链接：待补充（已上传至 bilibili 后更新此链接）
 
 ## 依赖列表
 
@@ -305,16 +338,17 @@ python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
 - Flask
 - supabase
 - requests
+- PyYAML
 
 **前端（Node.js）：**
 
-- next
-- react / react-dom
+- next / react / react-dom
 - typescript
 - tailwindcss / @tailwindcss/postcss
+- eslint / eslint-config-next
 - concurrently
 
 ## 原创功能与复用说明
 
-- 原创内容：用户登录、小说导入、章节识别、字数统计、记录保存、小说提炼流程、25 字段 JSON 中间层设计、AI 客户端封装、卡片编辑器、原文依据抽屉等全部代码
+- 原创内容：用户登录、小说导入、章节识别、字数统计、记录保存、小说提炼流程、25 字段 JSON 中间层设计、AI 客户端封装、卡片编辑器、原文依据抽屉、YAML Schema 规则库（格式校验 / CRUD / 权限控制）、侧边栏导航等全部代码
 - 复用内容：无
