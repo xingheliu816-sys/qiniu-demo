@@ -87,6 +87,19 @@ export async function batchParseChapters(novelId: number, chapterIds: number[]):
   });
 }
 
+export async function deleteChapter(chapterId: number): Promise<ChapterActionResponse> {
+  return request<ChapterActionResponse>(`/api/chapters/${chapterId}/delete`, {
+    method: 'POST',
+  });
+}
+
+export async function batchDeleteChapters(novelId: number, chapterIds: number[]): Promise<ChapterActionResponse> {
+  return request<ChapterActionResponse>(`/api/novels/${novelId}/chapters/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterIds }),
+  });
+}
+
 // ===== 认证 =====
 
 export interface AuthResponse {

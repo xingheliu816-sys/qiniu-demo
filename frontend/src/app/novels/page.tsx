@@ -74,7 +74,7 @@ export default function NovelsPage() {
     draft: { label: '草稿', cls: 'bg-warning/10 text-warning' },
     imported: { label: '已保存', cls: 'bg-success/10 text-success' },
     parsed: { label: '已保存', cls: 'bg-success/10 text-success' },
-    parse_failed: { label: '识别失败', cls: 'bg-error/10 text-error' },
+    parse_failed: { label: '提炼失败', cls: 'bg-error/10 text-error' },
   };
 
   function getNovelStatus(novel: api.NovelItem): { label: string; cls: string } {

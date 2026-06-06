@@ -351,6 +351,53 @@ def api_batch_parse_chapters(novel_id):
         return jsonify({"success": False, "message": f"批量识别失败: {str(e)}"}), 500
 
 
+@app.route('/api/chapters/<int:chapter_id>/delete', methods=['POST', 'OPTIONS'])
+@login_required
+def api_delete_chapter(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.db import get_db
+    try:
+        db = get_db()
+        existing = db.table('chapters').select('id, novel_id').eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not existing.data:
+            return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
+        novel_id = existing.data[0]['novel_id']
+        db.table('chapters').delete().eq('id', chapter_id).execute()
+        remaining = db.table('chapters').select('id').eq('novel_id', novel_id).execute()
+        db.table('novels').update({'chapter_count': len(remaining.data or [])}).eq('id', novel_id).execute()
+        return jsonify({"success": True, "message": "章节已删除。"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
+
+
+@app.route('/api/novels/<int:novel_id>/chapters/delete', methods=['POST', 'OPTIONS'])
+@login_required
+def api_batch_delete_chapters(novel_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json()
+    if not data or 'chapterIds' not in data or not data['chapterIds']:
+        return jsonify({"success": False, "message": "请选择要删除的章节"}), 400
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+    from src.db import get_db
+    chapter_ids = data['chapterIds']
+    try:
+        db = get_db()
+        existing = db.table('chapters').select('id').eq('novel_id', novel_id).eq('user_id', session['user_id']).in_('id', chapter_ids).execute()
+        if not existing.data:
+            return jsonify({"success": False, "message": "未找到对应章节"}), 404
+        valid_ids = [c['id'] for c in existing.data]
+        db.table('chapters').delete().in_('id', valid_ids).execute()
+        remaining = db.table('chapters').select('id').eq('novel_id', novel_id).execute()
+        db.table('novels').update({'chapter_count': len(remaining.data or [])}).eq('id', novel_id).execute()
+        return jsonify({"success": True, "message": f"已删除 {len(valid_ids)} 个章节。"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"批量删除失败: {str(e)}"}), 500
+
+
 @app.route('/api/history', methods=['GET', 'OPTIONS'])
 @login_required
 def api_history():

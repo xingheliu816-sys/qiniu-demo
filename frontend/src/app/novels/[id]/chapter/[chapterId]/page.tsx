@@ -84,19 +84,29 @@ export default function ChapterEditPage() {
     }
   }
 
-  async function handleParse() {
+  async function handleParseAfterSave() {
+    if (!title.trim()) {
+      showToast('章节标题不能为空', 'error');
+      return;
+    }
     setParsing(true);
     try {
-      const res = await api.parseChapter(chapterId);
-      if (res.success) {
+      const saveRes = await api.saveChapter(chapterId, { title, content });
+      if (!saveRes.success) {
+        showToast('保存失败', 'error');
+        setParsing(false);
+        return;
+      }
+      const parseRes = await api.parseChapter(chapterId);
+      if (parseRes.success) {
         setParseStatus('parsed');
-        showToast(res.message, 'success');
+        showToast(parseRes.message, 'success');
       } else {
         setParseStatus('parse_failed');
-        showToast(res.message, 'error');
+        showToast(parseRes.message, 'error');
       }
     } catch {
-      showToast('识别失败', 'error');
+      showToast('提炼失败', 'error');
     } finally {
       setParsing(false);
     }
@@ -116,32 +126,14 @@ export default function ChapterEditPage() {
     <div className="flex-1 flex">
       <Sidebar />
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-serif font-bold text-ink">{novelTitle || '未命名'}</h2>
-            <p className="text-sm text-ink-light mt-1">
-              第 {chapterIndex} 章 · 编辑
-              {parseStatus === 'parsed' && <span className="ml-2 text-success">(已识别)</span>}
-              {parseStatus === 'parse_failed' && <span className="ml-2 text-error">(识别失败)</span>}
-              {parseStatus === 'not_parsed' && <span className="ml-2 text-ink-light">(未识别)</span>}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {saving ? '保存中...' : '保存章节'}
-            </button>
-            <button
-              onClick={handleParse}
-              disabled={parsing}
-              className="px-4 py-2 bg-success hover:bg-success/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {parsing ? '识别中...' : '识别当前章节'}
-            </button>
-          </div>
+        <div>
+          <h2 className="text-xl font-serif font-bold text-ink">{novelTitle || '未命名'}</h2>
+          <p className="text-sm text-ink-light mt-1">
+            第 {chapterIndex} 章 · 编辑
+            {parseStatus === 'parsed' && <span className="ml-2 text-success">(已提炼)</span>}
+            {parseStatus === 'parse_failed' && <span className="ml-2 text-error">(提炼失败)</span>}
+            {parseStatus === 'not_parsed' && <span className="ml-2 text-ink-light">(未提炼)</span>}
+          </p>
         </div>
 
         <div>
@@ -157,11 +149,11 @@ export default function ChapterEditPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-ink mb-1.5">章节正文</label>
+          <label className="block text-sm font-medium text-ink mb-1.5">正文</label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="请输入章节正文"
+            placeholder="请输入正文"
             className="w-full px-3.5 py-2.5 bg-paper border border-border rounded-lg text-sm text-ink placeholder:text-ink-light/50 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-colors resize-y min-h-[300px]"
           />
         </div>
@@ -175,18 +167,18 @@ export default function ChapterEditPage() {
           </button>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleParse}
-              disabled={parsing}
-              className="px-4 py-2 bg-success hover:bg-success/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {parsing ? '识别中...' : '识别当前章节'}
-            </button>
-            <button
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              {saving ? '保存中...' : '保存章节'}
+              {saving ? '保存中...' : '保存草稿'}
+            </button>
+            <button
+              onClick={handleParseAfterSave}
+              disabled={parsing}
+              className="px-4 py-2 bg-success hover:bg-success/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {parsing ? '识别中...' : '提炼当前章节'}
             </button>
           </div>
         </div>

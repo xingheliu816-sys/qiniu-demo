@@ -251,12 +251,18 @@ def run_extraction(novel_id, user_id):
     novel = fetch_novel_meta(novel_id, user_id)
     if not novel:
         return False, "小说项目不存在或无权访问", None
-    if novel['status'] != 'parsed':
-        return False, "章节识别尚未完成，无法进行小说提炼", None
 
     chapters = fetch_chapters(novel_id, user_id)
     if not chapters:
-        return False, "未找到章节内容，请先完成章节识别", None
+        return False, "未找到章节内容，请先新增并识别章节", None
+
+    db = get_db()
+    parsed_count_res = db.table('chapters').select('id', count='exact').eq(
+        'novel_id', novel_id
+    ).eq('user_id', user_id).eq('parse_status', 'parsed').execute()
+    parsed_count = parsed_count_res.count or 0
+    if parsed_count == 0:
+        return False, "请先至少识别一个章节后再进行 AI 提炼", None
 
     upsert_extraction(novel_id, user_id, status='extracting', error_message=None)
     prompt = build_extraction_prompt(novel['title'], chapters)
