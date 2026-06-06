@@ -1,6 +1,7 @@
 import copy
 import json
 import re
+import traceback
 from datetime import datetime
 
 from src.db import get_db
@@ -309,3 +310,60 @@ def get_source_ref(novel_id, user_id, chapter_id, start_offset, end_offset):
         'excerpt': content[s:e],
         'full_length': len(content),
     }
+
+
+def _ensure_dict(v):
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    if v is None:
+        return {}
+    return {}
+
+
+def get_chapter_extraction(chapter_id, user_id):
+    try:
+        db = get_db()
+        result = db.table('chapter_extractions').select(
+            'id, chapter_id, user_id, novel_id, extraction_json, updated_at'
+        ).eq('chapter_id', chapter_id).eq('user_id', user_id).execute()
+        if not result.data:
+            return None
+        row = result.data[0]
+        row['extraction_json'] = _ensure_dict(row.get('extraction_json'))
+        return row
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def get_saved_chapter_extraction(chapter_id, user_id):
+    try:
+        return get_chapter_extraction(chapter_id, user_id)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def save_chapter_extraction(chapter_id, user_id, novel_id, extraction_json):
+    db = get_db()
+    now = datetime.now().isoformat()
+    existing = get_chapter_extraction(chapter_id, user_id)
+    if existing:
+        db.table('chapter_extractions').update({
+            'extraction_json': extraction_json,
+            'updated_at': now,
+        }).eq('id', existing['id']).execute()
+        return existing['id']
+    result = db.table('chapter_extractions').insert({
+        'chapter_id': chapter_id,
+        'user_id': user_id,
+        'novel_id': novel_id,
+        'extraction_json': extraction_json,
+        'updated_at': now,
+    }).execute()
+    return result.data[0]['id']
