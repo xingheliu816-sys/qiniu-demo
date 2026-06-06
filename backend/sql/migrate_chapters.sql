@@ -1,0 +1,3 @@
+-- 在 Supabase SQL Editor 中执行
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS parse_status VARCHAR(20) NOT NULL DEFAULT 'not_parsed';
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW();

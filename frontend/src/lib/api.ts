@@ -13,24 +13,81 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export interface ParseChapter {
-  id?: number;
-  index: number;
+// ===== 章节相关 =====
+
+export interface ChapterItem {
+  id: number;
+  novel_id: number;
+  chapter_index: number;
   title: string;
-  content: string;
-  wordCount: number;
+  content?: string;
+  word_count: number;
+  parse_status: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface ParseResult {
+export interface ChapterListResponse {
   success: boolean;
-  novelId?: number | null;
-  title: string;
-  totalWordCount: number;
-  chapterCount: number;
-  isEnoughChapters: boolean;
-  message: string;
-  chapters: ParseChapter[];
+  chapters: ChapterItem[];
+  message?: string;
 }
+
+export interface ChapterDetailResponse {
+  success: boolean;
+  chapter: ChapterItem;
+  message?: string;
+}
+
+export interface ChapterCreateResponse {
+  success: boolean;
+  chapter?: ChapterItem;
+  message?: string;
+}
+
+export interface ChapterActionResponse {
+  success: boolean;
+  message: string;
+  wordCount?: number;
+  errors?: string[];
+}
+
+export async function getChapters(novelId: number): Promise<ChapterListResponse> {
+  return request<ChapterListResponse>(`/api/novels/${novelId}/chapters`);
+}
+
+export async function createChapter(novelId: number, title?: string): Promise<ChapterCreateResponse> {
+  return request<ChapterCreateResponse>(`/api/novels/${novelId}/chapters`, {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function getChapter(chapterId: number): Promise<ChapterDetailResponse> {
+  return request<ChapterDetailResponse>(`/api/chapters/${chapterId}`);
+}
+
+export async function saveChapter(chapterId: number, data: { title?: string; content?: string }): Promise<ChapterActionResponse> {
+  return request<ChapterActionResponse>(`/api/chapters/${chapterId}/save`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function parseChapter(chapterId: number): Promise<ChapterActionResponse> {
+  return request<ChapterActionResponse>(`/api/chapters/${chapterId}/parse`, {
+    method: 'POST',
+  });
+}
+
+export async function batchParseChapters(novelId: number, chapterIds: number[]): Promise<ChapterActionResponse> {
+  return request<ChapterActionResponse>(`/api/novels/${novelId}/chapters/batch-parse`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterIds }),
+  });
+}
+
+// ===== 认证 =====
 
 export interface AuthResponse {
   success: boolean;
@@ -44,21 +101,31 @@ export interface SessionResponse {
   message?: string;
 }
 
-export interface HistoryRecord {
-  id: number;
-  title: string;
-  input_type: string;
-  total_word_count: number;
-  chapter_count: number;
-  is_success: number;
-  message: string;
-  created_at: string;
+export async function register(username: string, password: string): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
 }
 
-export interface HistoryResponse {
-  success: boolean;
-  records: HistoryRecord[];
+export async function login(username: string, password: string): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
 }
+
+export async function logout(): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/logout', {
+    method: 'POST',
+  });
+}
+
+export async function getSession(): Promise<SessionResponse> {
+  return request<SessionResponse>('/api/session');
+}
+
+// ===== 小说 =====
 
 export interface NovelItem {
   id: number;
@@ -87,6 +154,57 @@ export interface CreateNovelResponse {
   title?: string;
   message?: string;
 }
+
+export async function getNovels(): Promise<NovelsResponse> {
+  return request<NovelsResponse>('/api/novels');
+}
+
+export async function createNovel(title?: string): Promise<CreateNovelResponse> {
+  return request<CreateNovelResponse>('/api/novels/create', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function getNovel(novelId: number): Promise<NovelDetailResponse> {
+  return request<NovelDetailResponse>(`/api/novels/${novelId}`);
+}
+
+export async function saveNovel(novelId: number): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(`/api/novels/${novelId}/save`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteNovel(novelId: number): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(`/api/novels/${novelId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ===== 历史记录 =====
+
+export interface HistoryRecord {
+  id: number;
+  title: string;
+  input_type: string;
+  total_word_count: number;
+  chapter_count: number;
+  is_success: number;
+  message: string;
+  created_at: string;
+}
+
+export interface HistoryResponse {
+  success: boolean;
+  records: HistoryRecord[];
+}
+
+export async function getHistory(): Promise<HistoryResponse> {
+  return request<HistoryResponse>('/api/history');
+}
+
+// ===== 小说提炼 =====
 
 export interface SourceRef {
   chapter_id?: number;
@@ -150,82 +268,6 @@ export interface SourceRefResponse {
   excerpt?: string;
   full_length?: number;
   message?: string;
-}
-
-export async function register(username: string, password: string): Promise<AuthResponse> {
-  return request<AuthResponse>('/api/register', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
-}
-
-export async function login(username: string, password: string): Promise<AuthResponse> {
-  return request<AuthResponse>('/api/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
-}
-
-export async function logout(): Promise<AuthResponse> {
-  return request<AuthResponse>('/api/logout', {
-    method: 'POST',
-  });
-}
-
-export async function getSession(): Promise<SessionResponse> {
-  return request<SessionResponse>('/api/session');
-}
-
-export async function parseChapters(title: string, content: string, inputType: string, chapterName?: string): Promise<ParseResult> {
-  return request<ParseResult>('/api/parse-chapters', {
-    method: 'POST',
-    body: JSON.stringify({ title, content, inputType, chapterName }),
-  });
-}
-
-export async function updateChapterTitle(chapterId: number, title: string): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>('/api/chapters/update-title', {
-    method: 'POST',
-    body: JSON.stringify({ chapterId, title }),
-  });
-}
-
-export async function getHistory(): Promise<HistoryResponse> {
-  return request<HistoryResponse>('/api/history');
-}
-
-export async function getNovels(): Promise<NovelsResponse> {
-  return request<NovelsResponse>('/api/novels');
-}
-
-export async function createNovel(title?: string): Promise<CreateNovelResponse> {
-  return request<CreateNovelResponse>('/api/novels/create', {
-    method: 'POST',
-    body: JSON.stringify({ title }),
-  });
-}
-
-export async function getNovel(novelId: number): Promise<NovelDetailResponse> {
-  return request<NovelDetailResponse>(`/api/novels/${novelId}`);
-}
-
-export async function parseChaptersWithNovel(novelId: number, title: string, content: string, inputType: string, chapterName?: string): Promise<ParseResult> {
-  return request<ParseResult>('/api/parse-chapters', {
-    method: 'POST',
-    body: JSON.stringify({ title, content, inputType, chapterName, novelId }),
-  });
-}
-
-export async function saveNovel(novelId: number): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>(`/api/novels/${novelId}/save`, {
-    method: 'POST',
-  });
-}
-
-export async function deleteNovel(novelId: number): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>(`/api/novels/${novelId}`, {
-    method: 'DELETE',
-  });
 }
 
 export async function triggerExtraction(novelId: number): Promise<ExtractionResponse> {

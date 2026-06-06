@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ExtractionCard from './ExtractionCard';
 import SourceRefDrawer from './SourceRefDrawer';
+import Sidebar from '@/components/Sidebar';
 
 const SECTION_ORDER: { key: keyof api.ExtractionResult; title: string; subtitle: string }[] = [
   { key: 'core_story', title: '核心故事', subtitle: '主人公、目标、阻碍、代价、不可逆变化' },
@@ -60,7 +61,7 @@ function showToast(message: string, type: 'success' | 'error') {
 }
 
 export default function NovelExtractionPage() {
-  const { username, isLoading, logout } = useAuth();
+  const { username, isLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const novelId = Number(params.id);
@@ -201,11 +202,6 @@ export default function NovelExtractionPage() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
-
   if (isLoading || pageLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -231,27 +227,8 @@ export default function NovelExtractionPage() {
   const canExtract = novelStatus === 'parsed';
 
   return (
-    <div className="flex-1 flex flex-col">
-      <header className="bg-card border-b border-border">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-serif font-bold text-lg text-ink">Novel2Script AI</span>
-            <button onClick={() => router.push('/novels')} className="text-sm text-ink-light hover:text-ink transition-colors">
-              我的小说
-            </button>
-            <span className="text-sm text-accent font-medium">小说提炼</span>
-            <button onClick={() => router.push('/history')} className="text-sm text-ink-light hover:text-ink transition-colors">
-              历史记录
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-ink-light">{username}</span>
-            <button onClick={handleLogout} className="text-sm text-ink-light hover:text-error transition-colors">
-              退出
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="flex-1 flex">
+      <Sidebar />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-8 space-y-6">
         <div className="flex items-start justify-between gap-4">

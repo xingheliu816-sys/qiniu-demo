@@ -170,109 +170,185 @@ def api_delete_novel(novel_id):
         return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
 
 
-@app.route('/api/parse-chapters', methods=['POST', 'OPTIONS'])
+@app.route('/api/novels/<int:novel_id>/chapters', methods=['GET', 'POST', 'OPTIONS'])
 @login_required
-def api_parse_chapters():
+def api_novel_chapters(novel_id):
     if request.method == 'OPTIONS':
         return jsonify({})
-    data = request.get_json()
-    if not data:
-        return jsonify({"success": False, "message": "请求数据为空"}), 400
+    from src.novel_service import check_novel_ownership
+    from src.db import get_db
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
 
-    title = data.get('title', '').strip()
-    content = data.get('content', '')
-    input_type = data.get('inputType', 'paste')
-    chapter_name = data.get('chapterName', '').strip()
-    novel_id = data.get('novelId')
-
-    from src.chapter_parser import build_parse_result
-    result = build_parse_result(title, content, input_type, chapter_name)
-
-    if not result['success']:
-        return jsonify(result)
-
-    from src.record_service import save_chapters, save_parse_record
-    from src.novel_service import update_novel_after_parse
-    try:
-        user_id = session['user_id']
-
-        if novel_id:
-            from src.novel_service import check_novel_ownership
-            if not check_novel_ownership(novel_id, user_id):
-                return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
-            update_novel_after_parse(
-                novel_id=novel_id,
-                user_id=user_id,
-                title=result['title'],
-                input_type=input_type,
-                original_text=content,
-                total_word_count=result['totalWordCount'],
-                chapter_count=result['chapterCount'],
-                status='parsed' if result['isEnoughChapters'] else 'parse_failed'
-            )
-            from src.db import get_db
+    if request.method == 'GET':
+        try:
             db = get_db()
-            db.table('chapters').delete().eq('novel_id', novel_id).execute()
-            result['novelId'] = novel_id
-        else:
-            from src.novel_service import create_novel
-            novel_id = create_novel(user_id, result['title'])
-            update_novel_after_parse(
-                novel_id=novel_id,
-                user_id=user_id,
-                title=result['title'],
-                input_type=input_type,
-                original_text=content,
-                total_word_count=result['totalWordCount'],
-                chapter_count=result['chapterCount'],
-                status='parsed' if result['isEnoughChapters'] else 'parse_failed'
-            )
-            result['novelId'] = novel_id
+            result = db.table('chapters').select(
+                'id, chapter_index, title, word_count, parse_status, created_at, updated_at'
+            ).eq('novel_id', novel_id).eq('user_id', session['user_id']).order('chapter_index').execute()
+            return jsonify({"success": True, "chapters": result.data or []})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"获取章节列表失败: {str(e)}"}), 500
 
-        save_chapters(novel_id, user_id, result['chapters'])
-        save_parse_record(
-            novel_id=novel_id,
-            user_id=user_id,
-            chapter_count=result['chapterCount'],
-            is_success=1 if result['isEnoughChapters'] else 0,
-            message=result['message']
-        )
-
-        from src.db import get_db
-        db = get_db()
-        chapters_result = db.table('chapters').select('id, chapter_index').eq('novel_id', novel_id).eq('user_id', user_id).execute()
-        id_map = {ch['chapter_index']: ch['id'] for ch in chapters_result.data}
-        for ch in result['chapters']:
-            ch['id'] = id_map.get(ch['index'])
-
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"success": False, "message": f"保存记录失败: {str(e)}"}), 500
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        try:
+            db = get_db()
+            count_result = db.table('chapters').select('chapter_index').eq('novel_id', novel_id).eq('user_id', session['user_id']).order('chapter_index', desc=True).limit(1).execute()
+            next_index = (count_result.data[0]['chapter_index'] + 1) if count_result.data else 1
+            title = data.get('title', '').strip() or f'第 {next_index} 章'
+            ins = db.table('chapters').insert({
+                'novel_id': novel_id,
+                'user_id': session['user_id'],
+                'chapter_index': next_index,
+                'title': title,
+                'content': '',
+                'word_count': 0,
+                'parse_status': 'not_parsed',
+            }).execute()
+            chapter = ins.data[0]
+            # Update novel chapter_count
+            db.table('novels').update({'chapter_count': next_index}).eq('id', novel_id).execute()
+            return jsonify({"success": True, "chapter": chapter})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"创建章节失败: {str(e)}"}), 500
 
 
-@app.route('/api/chapters/update-title', methods=['POST', 'OPTIONS'])
+@app.route('/api/chapters/<int:chapter_id>', methods=['GET', 'OPTIONS'])
 @login_required
-def api_update_chapter_title():
+def api_get_chapter(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.db import get_db
+    try:
+        db = get_db()
+        result = db.table('chapters').select(
+            'id, novel_id, chapter_index, title, content, word_count, parse_status'
+        ).eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not result.data:
+            return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
+        return jsonify({"success": True, "chapter": result.data[0]})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"获取章节失败: {str(e)}"}), 500
+
+
+@app.route('/api/chapters/<int:chapter_id>/save', methods=['POST', 'OPTIONS'])
+@login_required
+def api_save_chapter(chapter_id):
     if request.method == 'OPTIONS':
         return jsonify({})
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "message": "请求数据为空"}), 400
-
-    chapter_id = data.get('chapterId')
-    title = data.get('title', '').strip()
-
-    if not chapter_id or not title:
-        return jsonify({"success": False, "message": "参数不完整"}), 400
-
-    from src.record_service import update_chapter_title
+    from src.db import get_db
+    from src.chapter_parser import count_non_blank_chars
     try:
-        success = update_chapter_title(chapter_id, title)
-        if success:
-            return jsonify({"success": True, "message": "章节标题已保存。"})
-        return jsonify({"success": False, "message": "未找到该章节"}), 404
+        db = get_db()
+        existing = db.table('chapters').select('id, novel_id').eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not existing.data:
+            return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
+        title = data.get('title', '').strip()
+        content = data.get('content', '')
+        word_count = count_non_blank_chars(content)
+        update_data = {'word_count': word_count}
+        if title:
+            update_data['title'] = title
+        if content is not None:
+            update_data['content'] = content
+        from datetime import datetime
+        update_data['updated_at'] = datetime.now().isoformat()
+        db.table('chapters').update(update_data).eq('id', chapter_id).execute()
+        return jsonify({"success": True, "message": "章节已保存。"})
     except Exception as e:
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+
+
+@app.route('/api/chapters/<int:chapter_id>/parse', methods=['POST', 'OPTIONS'])
+@login_required
+def api_parse_single_chapter(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.db import get_db
+    from src.chapter_parser import parse_single_chapter
+    from datetime import datetime
+    try:
+        db = get_db()
+        result = db.table('chapters').select(
+            'id, novel_id, title, content, word_count, parse_status'
+        ).eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not result.data:
+            return jsonify({"success": False, "message": "章节不存在或无权访问"}), 404
+        chapter = result.data[0]
+        parsed = parse_single_chapter(chapter['title'], chapter['content'])
+        if not parsed['success']:
+            db.table('chapters').update({
+                'parse_status': 'parse_failed',
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', chapter_id).execute()
+            return jsonify({"success": False, "message": parsed['message'], "wordCount": parsed['wordCount']})
+        db.table('chapters').update({
+            'parse_status': 'parsed',
+            'word_count': parsed['wordCount'],
+            'content': parsed['content'],
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', chapter_id).execute()
+        return jsonify({
+            "success": True,
+            "message": "当前章节识别成功。",
+            "wordCount": parsed['wordCount'],
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"识别失败: {str(e)}"}), 500
+
+
+@app.route('/api/novels/<int:novel_id>/chapters/batch-parse', methods=['POST', 'OPTIONS'])
+@login_required
+def api_batch_parse_chapters(novel_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json()
+    if not data or 'chapterIds' not in data or not data['chapterIds']:
+        return jsonify({"success": False, "message": "请选择要识别的章节"}), 400
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+    from src.db import get_db
+    from src.chapter_parser import parse_single_chapter
+    from datetime import datetime
+    chapter_ids = data['chapterIds']
+    try:
+        db = get_db()
+        chapters_result = db.table('chapters').select(
+            'id, title, content, word_count'
+        ).eq('novel_id', novel_id).eq('user_id', session['user_id']).in_('id', chapter_ids).execute()
+        if not chapters_result.data:
+            return jsonify({"success": False, "message": "未找到对应章节"}), 404
+        success_count = 0
+        fail_count = 0
+        errors = []
+        for ch in chapters_result.data:
+            parsed = parse_single_chapter(ch['title'], ch['content'])
+            if parsed['success']:
+                db.table('chapters').update({
+                    'parse_status': 'parsed',
+                    'word_count': parsed['wordCount'],
+                    'content': parsed['content'],
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', ch['id']).execute()
+                success_count += 1
+            else:
+                db.table('chapters').update({
+                    'parse_status': 'parse_failed',
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', ch['id']).execute()
+                fail_count += 1
+                errors.append(f"章节 {ch['title']}: {parsed['message']}")
+        msg = f"已完成所选章节识别。本次识别章节数：{success_count}"
+        if fail_count > 0:
+            msg += f"，失败：{fail_count}"
+        return jsonify({"success": True, "message": msg, "errors": errors})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"批量识别失败: {str(e)}"}), 500
 
 
 @app.route('/api/history', methods=['GET', 'OPTIONS'])

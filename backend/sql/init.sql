@@ -31,9 +31,11 @@ CREATE TABLE IF NOT EXISTS chapters (
   user_id INT NOT NULL REFERENCES users(id),
   chapter_index INT NOT NULL,
   title VARCHAR(255) NOT NULL,
-  content TEXT NOT NULL,
-  word_count INT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  content TEXT NOT NULL DEFAULT '',
+  word_count INT NOT NULL DEFAULT 0,
+  parse_status VARCHAR(20) NOT NULL DEFAULT 'not_parsed',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- 章节解析记录表
