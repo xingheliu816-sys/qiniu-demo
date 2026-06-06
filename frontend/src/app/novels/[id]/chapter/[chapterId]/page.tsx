@@ -91,22 +91,25 @@ export default function ChapterEditPage() {
     }
     setParsing(true);
     try {
-      const saveRes = await api.saveChapter(chapterId, { title, content });
-      if (!saveRes.success) {
-        showToast('保存失败', 'error');
-        setParsing(false);
-        return;
-      }
-      const parseRes = await api.parseChapter(chapterId);
-      if (parseRes.success) {
-        setParseStatus('parsed');
-        showToast(parseRes.message, 'success');
+      // 合并入口：把保存 + 识别前置 + 进入小说提炼合到一次请求
+      const res = await api.extractFromChapter(chapterId, { title, content });
+      if (!res.success) {
+        if (res.stage === 'save') {
+          showToast('章节保存失败，请稍后重试。', 'error');
+        } else if (res.stage === 'parse') {
+          setParseStatus('parse_failed');
+          showToast(res.message || '章节内容处理失败，请检查章节正文后重试。', 'error');
+        } else {
+          setParseStatus('parsed');
+          showToast(res.message || 'AI 提炼失败，请稍后重试。', 'error');
+        }
       } else {
-        setParseStatus('parse_failed');
-        showToast(parseRes.message, 'error');
+        setParseStatus('parsed');
       }
-    } catch {
-      showToast('提炼失败', 'error');
+      router.push(`/novels/${novelId}/extraction`);
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : '提炼失败', 'error');
+      router.push(`/novels/${novelId}/extraction`);
     } finally {
       setParsing(false);
     }
@@ -178,7 +181,7 @@ export default function ChapterEditPage() {
               disabled={parsing}
               className="px-4 py-2 bg-success hover:bg-success/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              {parsing ? '识别中...' : '提炼当前章节'}
+              {parsing ? '提炼中...' : '提炼当前章节'}
             </button>
           </div>
         </div>

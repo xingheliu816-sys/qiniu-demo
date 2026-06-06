@@ -100,20 +100,27 @@ export default function NovelChaptersPage() {
     }
   }
 
-  // Single chapter extract: parse + go to extraction page
+  // 单章「提炼」：合并 识别前置 + 进入小说提炼
   async function handleSingleExtract(chapterId: number) {
     setProcessing(true);
     try {
-      await api.parseChapter(chapterId);
+      const res = await api.extractFromChapter(chapterId);
+      if (!res.success) {
+        const fallback = res.stage === 'parse'
+          ? '章节内容处理失败，请检查章节正文后重试。'
+          : 'AI 提炼失败，请稍后重试。';
+        showToast(res.message || fallback, 'error');
+      }
       router.push(`/novels/${novelId}/extraction`);
-    } catch {
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : '提炼失败', 'error');
       router.push(`/novels/${novelId}/extraction`);
     } finally {
       setProcessing(false);
     }
   }
 
-  // Batch extract: parse selected + go to extraction page
+  // 多选「AI 提炼」：合并 识别前置 + 进入小说提炼
   async function handleBatchExtract() {
     if (selectedIds.size === 0) {
       showToast('请先选择需要提炼的章节。', 'error');
@@ -121,18 +128,25 @@ export default function NovelChaptersPage() {
     }
     setProcessing(true);
     try {
-      await api.batchParseChapters(novelId, Array.from(selectedIds));
+      const res = await api.extractFromChapters(novelId, Array.from(selectedIds));
       setMultiMode(false);
       setSelectedIds(new Set());
+      if (!res.success) {
+        const fallback = res.stage === 'parse'
+          ? '章节内容处理失败，请检查章节正文后重试。'
+          : 'AI 提炼失败，请稍后重试。';
+        showToast(res.message || fallback, 'error');
+      }
       router.push(`/novels/${novelId}/extraction`);
-    } catch {
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : '提炼失败', 'error');
       router.push(`/novels/${novelId}/extraction`);
     } finally {
       setProcessing(false);
     }
   }
 
-  // Top AI提炼 button (non-multi mode) - parse all chapters
+  // 顶部「AI 提炼」按钮：多选模式走批量，非多选走「全部章节提炼」
   async function handleAIBtnClick() {
     if (multiMode) {
       handleBatchExtract();
@@ -145,9 +159,16 @@ export default function NovelChaptersPage() {
     setProcessing(true);
     try {
       const ids = chapters.map(c => c.id);
-      await api.batchParseChapters(novelId, ids);
+      const res = await api.extractFromChapters(novelId, ids);
+      if (!res.success) {
+        const fallback = res.stage === 'parse'
+          ? '章节内容处理失败，请检查章节正文后重试。'
+          : 'AI 提炼失败，请稍后重试。';
+        showToast(res.message || fallback, 'error');
+      }
       router.push(`/novels/${novelId}/extraction`);
-    } catch {
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : '提炼失败', 'error');
       router.push(`/novels/${novelId}/extraction`);
     } finally {
       setProcessing(false);

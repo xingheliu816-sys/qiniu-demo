@@ -87,6 +87,36 @@ export async function batchParseChapters(novelId: number, chapterIds: number[]):
   });
 }
 
+// 合并入口：单章「保存 → 识别前置 → 进入小说提炼」
+export interface ChapterExtractResponse extends ExtractionResponse {
+  novelId?: number;
+  stage?: string;
+  parsedCount?: number;
+  parseFailedCount?: number;
+  parseErrors?: string[];
+}
+
+export async function extractFromChapter(
+  chapterId: number,
+  data?: { title?: string; content?: string }
+): Promise<ChapterExtractResponse> {
+  return request<ChapterExtractResponse>(`/api/chapters/${chapterId}/extract`, {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+  });
+}
+
+// 合并入口：多章「识别前置 → 进入小说提炼」
+export async function extractFromChapters(
+  novelId: number,
+  chapterIds: number[]
+): Promise<ChapterExtractResponse> {
+  return request<ChapterExtractResponse>(`/api/novels/${novelId}/chapters/extract`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterIds }),
+  });
+}
+
 export async function deleteChapter(chapterId: number): Promise<ChapterActionResponse> {
   return request<ChapterActionResponse>(`/api/chapters/${chapterId}/delete`, {
     method: 'POST',
@@ -97,6 +127,20 @@ export async function batchDeleteChapters(novelId: number, chapterIds: number[])
   return request<ChapterActionResponse>(`/api/novels/${novelId}/chapters/delete`, {
     method: 'POST',
     body: JSON.stringify({ chapterIds }),
+  });
+}
+
+export async function importNovelFile(fileName: string, content: string): Promise<CreateNovelResponse> {
+  return request<CreateNovelResponse>('/api/novels/import-file', {
+    method: 'POST',
+    body: JSON.stringify({ fileName, content }),
+  });
+}
+
+export async function importNovelLink(url: string): Promise<CreateNovelResponse> {
+  return request<CreateNovelResponse>('/api/novels/import-link', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
   });
 }
 

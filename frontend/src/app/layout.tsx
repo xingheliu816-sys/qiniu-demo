@@ -4,7 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
   title: "Novel2Script AI",
-  description: "小说导入与章节识别工具",
+  description: "小说导入与提炼工具",
 };
 
 export default function RootLayout({

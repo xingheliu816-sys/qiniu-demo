@@ -49,7 +49,7 @@ export default function HistoryPage() {
       <Sidebar />
 
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
-        <h2 className="text-xl font-serif font-bold text-ink mb-6">我的导入与识别记录</h2>
+        <h2 className="text-xl font-serif font-bold text-ink mb-6">我的导入与提炼记录</h2>
 
         {loading ? (
           <div className="text-center py-16 text-sm text-ink-light">加载中...</div>

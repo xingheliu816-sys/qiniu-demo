@@ -76,6 +76,11 @@ Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大
 26. 不再显示"三章不足"或"不符合提交要求"提示
 27. 前端文案统一：已识别→已提炼，未识别→未提炼，识别失败→提炼失败
 28. 用户章节权限隔离：每个用户只能查看、编辑、删除、提炼自己的章节
+29. 单章提炼合并入口 `/api/chapters/<id>/extract`：自动保存章节标题/正文 → 识别前置 → 进入小说提炼
+30. 多章提炼合并入口 `/api/novels/<id>/chapters/extract`：批量识别前置 → 进入小说提炼
+31. 小说级提炼入口 `/api/novels/<id>/extract` 在无 parsed 章节时自动跑识别前置，确保用户从任意入口都能直接提炼
+32. 提炼前置成功后自动推进 `novels.status` 到 `parsed`，让提炼页面识别"可提炼"状态
+33. 章节列表"提炼"、章节编辑页"提炼当前章节"、多选"AI 提炼"三个入口统一跳转 `/novels/<id>/extraction`
 
 ### 功能 2：小说提炼（本次新增）
 
@@ -299,13 +304,14 @@ npm run dev
 | DELETE | `/api/novels/<id>` | 删除小说 |
 | GET  | `/api/novels/<id>/chapters` | 获取章节列表 |
 | POST | `/api/novels/<id>/chapters` | 新增章节 |
-| POST | `/api/novels/<id>/chapters/batch-parse` | 批量识别章节 |
 | GET  | `/api/chapters/<id>` | 获取章节详情（含正文） |
 | POST | `/api/chapters/<id>/save` | 保存章节标题与正文 |
-| POST | `/api/chapters/<id>/parse` | 单章识别 |
+| POST | `/api/chapters/<id>/parse` | 单章识别（合并入口的内部前置） |
+| POST | `/api/chapters/<id>/extract` | 单章合并入口：保存 → 识别前置 → 进入小说提炼 |
 | POST | `/api/chapters/<id>/delete` | 删除单章 |
 | POST | `/api/novels/<id>/chapters/batch-parse` | 批量识别章节 |
-| POST | `/api/novels/<id>/extract` | 触发小说提炼（调用 AI） |
+| POST | `/api/novels/<id>/chapters/extract` | 多章合并入口：识别前置 → 进入小说提炼 |
+| POST | `/api/novels/<id>/extract` | 触发小说提炼（无 parsed 章节时自动前置） |
 | GET  | `/api/novels/<id>/extraction` | 获取提炼结果 |
 | POST | `/api/novels/<id>/extraction/save` | 保存用户编辑后的提炼结果 |
 | GET  | `/api/novels/<id>/source-ref` | 按 chapter_id + offset 取原文片段 |
@@ -367,4 +373,5 @@ python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
 - 原创内容：用户登录、小说项目管理、章节列表式管理（章节标题与正文绑定保存）、单章编辑、单章识别、批量识别、小说提炼流程、25 字段 JSON 中间层设计、AI 客户端封装、卡片编辑器、原文依据抽屉、YAML Schema 规则库（格式校验 / CRUD / 权限控制）、侧边栏导航等全部代码
 - 复用内容：无
 
-> 本次章节输入模式改造未新增第三方依赖。
+> 本次章节操作与提炼入口改造未新增第三方依赖。
+> 本次提炼结果页面（下拉视图/自适应textarea/大元素折叠/小元素CRUD）、导入小说（文件/链接）改造未新增第三方依赖。

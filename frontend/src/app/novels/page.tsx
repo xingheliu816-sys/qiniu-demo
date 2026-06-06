@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ConfirmModal from './ConfirmModal';
 import Sidebar from '@/components/Sidebar';
+import ImportForm from '@/components/ImportForm';
 
 export default function NovelsPage() {
   const { username, isLoading } = useAuth();
@@ -14,6 +15,7 @@ export default function NovelsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !username) {
@@ -113,13 +115,21 @@ export default function NovelsPage() {
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-serif font-bold text-ink">我的小说</h2>
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {creating ? '创建中...' : '创建新小说'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-4 py-2 bg-paper border border-border hover:border-accent/30 text-ink text-sm font-medium rounded-lg transition-colors"
+            >
+              导入小说
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {creating ? '创建中...' : '创建新小说'}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -204,6 +214,15 @@ export default function NovelsPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {showImport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowImport(false)}>
+            <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 space-y-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-serif font-bold text-ink">导入小说</h3>
+              <p className="text-sm text-ink-light">当前支持：上传 .txt / .md 文件，或输入小说链接导入。</p>
+              <ImportForm onSuccess={(novelId) => { setShowImport(false); router.push(`/novels/${novelId}/import`); }} />
+            </div>
           </div>
         )}
       </main>

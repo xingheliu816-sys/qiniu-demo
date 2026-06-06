@@ -67,9 +67,11 @@ export default function NovelExtractionPage() {
   const novelId = Number(params.id);
 
   const [novelTitle, setNovelTitle] = useState('');
-  const [novelStatus, setNovelStatus] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
   const [pageError, setPageError] = useState('');
+
+  const [chapters, setChapters] = useState<api.ChapterItem[]>([]);
+  const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
 
   const [status, setStatus] = useState<Status>('not_started');
   const [errorMessage, setErrorMessage] = useState('');
@@ -98,7 +100,9 @@ export default function NovelExtractionPage() {
         return;
       }
       setNovelTitle(detail.novel.title);
-      setNovelStatus(detail.novel.status);
+
+      const chList = await api.getChapters(novelId);
+      setChapters(chList.chapters || []);
 
       const ext = await api.getExtraction(novelId);
       if (ext.success) {
@@ -132,10 +136,6 @@ export default function NovelExtractionPage() {
 
   async function handleStart() {
     if (extracting) return;
-    if (novelStatus !== 'parsed') {
-      showToast('章节识别尚未完成，无法提炼', 'error');
-      return;
-    }
     setExtracting(true);
     setStatus('extracting');
     setErrorMessage('');
@@ -146,12 +146,12 @@ export default function NovelExtractionPage() {
       setUserResult(data.userResult);
       setErrorMessage(data.errorMessage || '');
       if (!data.success) {
-        showToast(data.message || '提炼失败', 'error');
+        showToast(data.message || 'AI 提炼失败，请稍后重试。', 'error');
       } else {
         showToast('提炼完成', 'success');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '提炼失败';
+      const msg = err instanceof Error ? err.message : 'AI 提炼失败，请稍后重试。';
       setErrorMessage(msg);
       setStatus('failed');
       showToast(msg, 'error');
@@ -224,7 +224,7 @@ export default function NovelExtractionPage() {
   if (!username) return null;
 
   const tone = statusLabel[status] || statusLabel.not_started;
-  const canExtract = novelStatus === 'parsed';
+  const hasExtraction = status === 'extracted' || status === 'editing' || status === 'confirmed';
 
   return (
     <div className="flex-1 flex">
@@ -239,18 +239,9 @@ export default function NovelExtractionPage() {
           <span className={`shrink-0 px-3 py-1 rounded text-xs font-medium ${tone.tone}`}>{tone.label}</span>
         </div>
 
-        {!canExtract && (
-          <div className="bg-warning/10 border border-warning/20 rounded-xl px-5 py-4 text-sm text-warning">
-            该小说尚未完成章节识别，请先回到导入页完成识别后再进行提炼。
-            <button onClick={() => router.push(`/novels/${novelId}/import`)} className="ml-3 underline underline-offset-2 hover:text-warning/80">
-              回到导入页
-            </button>
-          </div>
-        )}
-
-        {canExtract && status === 'not_started' && (
+        {status === 'not_started' && (
           <div className="bg-card border border-border rounded-xl p-8 text-center space-y-4">
-            <p className="text-sm text-ink-light">点击下方按钮，AI 将根据已识别章节提炼故事骨干。整个过程可能需要 30 – 90 秒。</p>
+            <p className="text-sm text-ink-light">点击下方按钮，AI 将根据已保存章节提炼故事骨干。整个过程可能需要 30 – 90 秒。</p>
             <button
               onClick={handleStart}
               disabled={extracting}
@@ -283,11 +274,42 @@ export default function NovelExtractionPage() {
           </div>
         )}
 
-        {(status === 'extracted' || status === 'editing' || status === 'confirmed') && (
+        {hasExtraction && (
           <>
+            {/* Chapter list first */}
+            {chapters.length > 0 && (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-border bg-paper/40">
+                  <h3 className="text-sm font-bold text-ink">章节列表</h3>
+                </div>
+                <div className="divide-y divide-border">
+                  {chapters.map(ch => (
+                    <button
+                      key={ch.id}
+                      onClick={() => setSelectedChapterId(selectedChapterId === ch.id ? null : ch.id)}
+                      className={`w-full text-left px-5 py-3 flex items-center justify-between transition-colors hover:bg-paper/50 ${
+                        selectedChapterId === ch.id ? 'bg-accent/5 border-l-2 border-accent' : ''
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="text-sm text-ink-light mr-2">{ch.chapter_index}.</span>
+                        <span className="text-sm text-ink">{ch.title}</span>
+                      </div>
+                      <span className={`text-xs shrink-0 ml-3 ${
+                        ch.parse_status === 'parsed' ? 'text-success' : ch.parse_status === 'parse_failed' ? 'text-error' : 'text-ink-light'
+                      }`}>
+                        {ch.parse_status === 'parsed' ? '已提炼' : ch.parse_status === 'parse_failed' ? '提炼失败' : '未提炼'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Global extraction area */}
             <div className="bg-card border border-border rounded-xl px-5 py-4 text-sm text-ink-light flex items-center justify-between gap-3 flex-wrap">
               <span>
-                你可以编辑下方任意分区，编辑完成后点「保存最终结果」。保存后的版本会作为后续 YAML 剧本生成的基础。
+                你可以编辑下方任意分区，编辑完成后点「保存最终结果」。
               </span>
               <button
                 onClick={handleSave}
@@ -298,6 +320,7 @@ export default function NovelExtractionPage() {
               </button>
             </div>
 
+            {/* Global extraction content always visible */}
             <div className="space-y-4">
               {SECTION_ORDER.map(({ key, title, subtitle }) => (
                 <ExtractionCard
@@ -321,6 +344,12 @@ export default function NovelExtractionPage() {
               </button>
             </div>
           </>
+        )}
+
+        {!hasExtraction && status !== 'not_started' && status !== 'extracting' && status !== 'failed' && (
+          <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <p className="text-sm text-ink-light">当前暂无提炼内容。</p>
+          </div>
         )}
 
         <div className="text-center">
