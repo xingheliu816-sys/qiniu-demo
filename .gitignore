@@ -9,6 +9,7 @@ build/
 
 # Backend
 config.py
+backend/data/
 
 # Frontend
 frontend/node_modules/

@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 import ConfirmModal from '@/app/novels/ConfirmModal';
 
 const schemaTypeMap: Record<string, string> = {
@@ -53,8 +54,10 @@ export default function SchemaDetailPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton href="/schemas" />
+      </div>
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
-        <button onClick={() => router.push('/schemas')} className="text-sm text-ink-light hover:text-ink transition-colors mb-4">&larr; 返回 Schema 列表</button>
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
