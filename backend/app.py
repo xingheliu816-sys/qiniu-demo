@@ -1853,6 +1853,68 @@ def api_yaml_regenerate(novel_id):
     return jsonify({"success": success, "message": message, "draft": draft})
 
 
+# ===== 关系图谱（功能 5） =====
+
+
+@app.route('/api/novels/<int:novel_id>/relationship-graph', methods=['GET', 'OPTIONS'])
+@login_required
+def api_relationship_graph_get(novel_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+
+    from src.relationship_graph_service import get_graph
+    record = get_graph(novel_id, session['user_id'])
+    if not record:
+        return jsonify({"success": True, "graph": None})
+    return jsonify({"success": True, "graph": record})
+
+
+@app.route('/api/novels/<int:novel_id>/relationship-graph/generate', methods=['POST', 'OPTIONS'])
+@login_required
+def api_relationship_graph_generate(novel_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+
+    data = request.get_json(silent=True) or {}
+    chapter_ids = data.get('chapterIds') or []
+    from src.relationship_graph_service import generate_graph
+    success, message, record = generate_graph(novel_id, session['user_id'], chapter_ids)
+    return jsonify({"success": success, "message": message, "graph": record})
+
+
+@app.route('/api/novels/<int:novel_id>/relationship-graph/append', methods=['POST', 'OPTIONS'])
+@login_required
+def api_relationship_graph_append(novel_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+
+    data = request.get_json(silent=True) or {}
+    chapter_ids = data.get('chapterIds') or []
+    from src.relationship_graph_service import append_chapters_to_graph
+    success, message, record = append_chapters_to_graph(novel_id, session['user_id'], chapter_ids)
+    return jsonify({"success": success, "message": message, "graph": record})
+
+
+@app.route('/api/novels/<int:novel_id>/relationship-graph', methods=['DELETE'])
+@login_required
+def api_relationship_graph_delete(novel_id):
+    from src.novel_service import check_novel_ownership
+    if not check_novel_ownership(novel_id, session['user_id']):
+        return jsonify({"success": False, "message": "小说项目不存在或无权访问"}), 404
+    from src.relationship_graph_service import delete_graph
+    ok = delete_graph(novel_id, session['user_id'])
+    return jsonify({"success": ok, "message": "已删除关系图谱" if ok else "删除失败"})
+
+
 # 启动时初始化系统默认 Schema
 with app.app_context():
     try:

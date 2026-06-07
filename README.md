@@ -199,6 +199,8 @@ Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大
 
 ### 功能 5：关系图谱（本次新增）
 
+> **界面设计参考**：bilibili「408 知识图谱」类视频中常见的浅色背景、圆形气泡节点、柔和配色、顶部胶囊式分类切换的可视化风格。
+
 118. 左侧侧边栏新增「关系图谱」入口
 119. 进入小说后选择已提炼章节，DeepSeek AI 输出严格 graph JSON（nodes / edges / groups），不输出 Markdown 与 UI 代码
 120. 后端校验 graph JSON：nodes/edges 必填、id 唯一、edge.source/target 必须命中已存在 node、未提炼章节拦截、提炼章节合法性校验

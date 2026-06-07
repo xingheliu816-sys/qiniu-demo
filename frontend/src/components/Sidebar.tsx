@@ -46,6 +46,7 @@ export default function Sidebar() {
     { label: '历史记录', path: '/history', icon: '📋' },
     { label: '查看提炼内容', action: 'extraction-view', icon: '📑' },
     { label: 'YAML 剧本', path: currentNovelId ? `/novels/${currentNovelId}/yaml` : `/novels/0/yaml`, icon: '🎬' },
+    { label: '关系图谱', path: '/relationship-graph', icon: '🕸️' },
     { label: 'YAML 编辑器', path: '/yaml-editor', icon: '✏️' },
     { label: 'YAML Schema 规则库', path: '/schemas', icon: '📐' },
   ];

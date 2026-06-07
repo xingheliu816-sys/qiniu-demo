@@ -728,3 +728,91 @@ export async function setDefaultSchema(schemaId: number | null): Promise<SchemaA
     body: JSON.stringify({ schemaId }),
   });
 }
+
+// ===== 关系图谱（功能 5） =====
+
+export interface GraphSourceRef {
+  chapter_id?: number | string;
+  chapter_title?: string;
+  excerpt_preview?: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: string;
+  subtype?: string;
+  importance?: 'high' | 'medium' | 'low' | string;
+  description?: string;
+  source_refs?: GraphSourceRef[];
+  uncertainty?: boolean;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  type?: string;
+  label?: string;
+  strength?: 'high' | 'medium' | 'low' | string;
+  description?: string;
+  source_refs?: GraphSourceRef[];
+}
+
+export interface GraphGroup {
+  id: string;
+  label: string;
+  node_type: string;
+}
+
+export interface GraphData {
+  graph_meta?: {
+    novel_id?: number;
+    novel_title?: string;
+    chapter_ids?: number[];
+    generated_from?: string;
+    version?: string;
+  };
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  groups?: GraphGroup[];
+}
+
+export interface GraphRecord {
+  id?: number;
+  user_id?: number;
+  novel_id?: number;
+  chapter_ids?: number[];
+  graph_data_json: GraphData;
+  status: string;
+  error_report?: string;
+  node_count?: number;
+  edge_count?: number;
+  generated_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function getRelationshipGraph(novelId: number): Promise<{ success: boolean; graph: GraphRecord | null }> {
+  return request(`/api/novels/${novelId}/relationship-graph`);
+}
+
+export async function generateRelationshipGraph(novelId: number, chapterIds: number[]): Promise<{ success: boolean; message: string; graph: GraphRecord | null }> {
+  return request(`/api/novels/${novelId}/relationship-graph/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterIds }),
+  });
+}
+
+export async function appendChaptersToGraph(novelId: number, chapterIds: number[]): Promise<{ success: boolean; message: string; graph: GraphRecord | null }> {
+  return request(`/api/novels/${novelId}/relationship-graph/append`, {
+    method: 'POST',
+    body: JSON.stringify({ chapterIds }),
+  });
+}
+
+export async function deleteRelationshipGraph(novelId: number): Promise<{ success: boolean; message?: string }> {
+  return request(`/api/novels/${novelId}/relationship-graph`, {
+    method: 'DELETE',
+  });
+}
