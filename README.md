@@ -240,7 +240,7 @@ Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大
 2. 在项目 Dashboard → **Project Settings → API** 中获取：
    - **Project URL**（即 `SUPABASE_URL`）
    - **service_role key**（即 `SUPABASE_SERVICE_KEY`，⚠️ 不要用 anon key）
-3. 进入 **SQL Editor**，粘贴执行 `backend/sql/init.sql` 中的建表语句
+3. 进入 **SQL Editor**，依次粘贴执行：`backend/sql/init.sql`、`backend/sql/init_system_schema.sql`，以及 `backend/sql/migrations/` 目录下所有 `migrate_*.sql`（按文件名字母序执行即可）
 
 ### 2. 安装后端依赖
 
@@ -317,63 +317,132 @@ npm run dev
 
 ## 项目结构
 
+代码按功能划分目录。每个核心功能在前后端各有一组文件，便于按功能定位、扩展。
+
 ```text
 ├── README.md
 ├── docs/
 │   └── usage-guide.md         # 详细使用指南
-├── backend/                   # Flask API 后端
-│   ├── app.py                 # Flask 应用入口，路由注册
-│   ├── config.example.py      # 配置示例
-│   ├── config.py              # 本地配置（不提交）
-│   ├── requirements.txt       # Python 依赖
+├── backend/                       # Flask API 后端
+│   ├── app.py                     # Flask 应用入口（全部路由注册）
+│   ├── config.example.py          # 配置示例
+│   ├── config.py                  # 本地配置（不提交）
+│   ├── requirements.txt           # Python 依赖
 │   ├── sql/
-│   │   └── init.sql           # 数据库初始化脚本
-│   ├── src/
+│   │   ├── init.sql               # 初次建表脚本（功能 0–3 基础表）
+│   │   ├── init_system_schema.sql # 系统默认 YAML Schema 初始化
+│   │   └── migrations/            # 后续功能演进的迁移脚本（按时间先后执行）
+│   │       ├── migrate_chapters.sql                # 功能 1 章节表
+│   │       ├── migrate_chapter_extractions.sql     # 功能 2 章节提炼
+│   │       ├── migrate_chapter_extractions_v2.sql  # 功能 2 章节提炼 v2
+│   │       ├── migrate_yaml_drafts.sql             # 功能 4 YAML 草稿
+│   │       ├── migrate_yaml_draft_name.sql         # 功能 4 草稿命名
+│   │       ├── migrate_yaml_exports.sql            # 功能 4 最终导出
+│   │       └── migrate_relationship_graphs.sql     # 功能 5 关系图谱
+│   ├── src/                       # 业务逻辑层（按功能命名）
 │   │   ├── __init__.py
-│   │   ├── db.py              # Supabase 客户端封装
-│   │   ├── auth.py            # 用户注册、登录、密码哈希
-│   │   ├── chapter_parser.py  # 章节识别逻辑
-│   │   ├── novel_service.py   # 小说项目服务
-│   │   ├── record_service.py  # 数据保存与查询
-│   │   ├── ai_client.py       # AI 客户端，provider 可切换
-│   │   ├── extraction_service.py  # 小说提炼编排
-│   │   ├── schema_service.py  # YAML Schema 规则库管理
-│   │   └── yaml_generation_service.py  # YAML 剧本生成编排
+│   │   │
+│   │   │  # ── 基础设施 ──
+│   │   ├── db.py                  # Supabase 客户端封装
+│   │   ├── auth.py                # 注册 / 登录 / 密码哈希
+│   │   ├── ai_client.py           # AI 客户端（provider 可切换：deepseek / openai / gemini）
+│   │   │
+│   │   │  # ── 功能 0–1：小说项目 + 章节管理 ──
+│   │   ├── novel_service.py       # 小说项目 CRUD + 权限校验
+│   │   ├── record_service.py      # 导入历史记录
+│   │   ├── chapter_parser.py      # 章节识别（标题规则匹配）
+│   │   ├── file_text_extractor.py # 章节文件导入（.txt / .md / .docx）
+│   │   ├── html_cleaner.py        # 章节链接导入的 HTML 清洗
+│   │   │
+│   │   │  # ── 功能 2：小说提炼 ──
+│   │   ├── extraction_service.py  # 小说提炼 / 章节提炼 / AI prompt
+│   │   │
+│   │   │  # ── 功能 3：YAML Schema 规则库 ──
+│   │   ├── schema_service.py      # 系统 / 用户 Schema 管理 + 格式校验
+│   │   │
+│   │   │  # ── 功能 4：YAML 剧本生成 ──
+│   │   ├── yaml_generation_service.py  # JSON-first 工具链 / 多版本管理 / 校验 / 导出
+│   │   │
+│   │   │  # ── 功能 5：关系图谱 ──
+│   │   └── relationship_graph_service.py # graph JSON 生成 / 校验 / 合并 / 持久化
+│   │
 │   └── tests/
 │       ├── __init__.py
-│       ├── test_chapter_parser.py    # 章节识别测试
-│       └── test_extraction_service.py  # 提炼解析与 prompt 测试
-├── frontend/                  # Next.js 前端
+│       ├── test_chapter_parser.py        # 章节识别测试
+│       └── test_extraction_service.py    # 提炼解析与 prompt 测试
+│
+├── frontend/                              # Next.js 前端
 │   ├── package.json
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── login/             # 登录页
-│   │   │   ├── register/          # 注册页
-│   │   │   ├── novels/            # 我的小说列表页
-│   │   │   │   ├── ConfirmModal.tsx   # 删除确认弹窗
+│   │   ├── app/                            # App Router 路由（每个目录 = 一个功能页面）
+│   │   │   ├── login/                      # 登录页
+│   │   │   ├── register/                   # 注册页
+│   │   │   │
+│   │   │   │  # ── 功能 0–1：我的小说 + 章节管理 ──
+│   │   │   ├── novels/                     # 我的小说列表页
+│   │   │   │   ├── ConfirmModal.tsx
 │   │   │   │   └── [id]/
-│   │   │   │       ├── import/    # 小说导入与章节识别页
-│   │   │   │       └── extraction/  # 小说提炼页与卡片编辑器
-│   │   │   │           ├── page.tsx
-│   │   │   │           ├── ExtractionCard.tsx
-│   │   │   │           └── SourceRefDrawer.tsx
-│   │   │   ├── history/           # 历史记录页
-│   │   │   ├── schemas/           # YAML Schema 规则库
-│   │   │   │   ├── page.tsx       # 列表页
-│   │   │   │   ├── new/page.tsx   # 新建页
-│   │   │   │   ├── [id]/page.tsx  # 详情页
-│   │   │   │   └── [id]/edit/page.tsx  # 编辑页
-│   │   │   ├── layout.tsx         # 根布局
-│   │   │   ├── globals.css        # 全局样式
-│   │   │   └── page.tsx           # 首页（自动跳转）
+│   │   │   │       ├── import/             # 章节导入与识别页
+│   │   │   │       ├── chapter/[chapterId]/ # 单章编辑页
+│   │   │   │       │
+│   │   │   │       │  # ── 功能 2：小说提炼 ──
+│   │   │   │       ├── extraction/         # 提炼页与卡片编辑器
+│   │   │   │       │   ├── page.tsx
+│   │   │   │       │   ├── ExtractionCard.tsx
+│   │   │   │       │   └── SourceRefDrawer.tsx
+│   │   │   │       │
+│   │   │   │       │  # ── 功能 4：YAML 剧本生成 ──
+│   │   │   │       └── yaml/               # YAML 剧本列表 + 草稿管理
+│   │   │   │
+│   │   │   ├── history/                    # 历史记录页
+│   │   │   │
+│   │   │   │  # ── 功能 3：YAML Schema 规则库 ──
+│   │   │   ├── schemas/                    # Schema 列表 / 新建 / 详情 / 编辑
+│   │   │   │
+│   │   │   │  # ── 功能 4：YAML 编辑器 ──
+│   │   │   ├── yaml-editor/                # YAML 编辑器（行号 / 校验 / 修复 / 结构预览）
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── YamlStructurePreview.tsx
+│   │   │   │
+│   │   │   │  # ── 功能 5：关系图谱 ──
+│   │   │   ├── relationship-graph/         # 图谱入口 + 选小说 + Cytoscape 渲染
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── RelationshipGraphCanvas.tsx
+│   │   │   │   └── [novelId]/page.tsx
+│   │   │   │
+│   │   │   ├── layout.tsx                  # 根布局
+│   │   │   ├── globals.css                 # 全局样式
+│   │   │   └── page.tsx                    # 首页（自动跳转）
+│   │   │
 │   │   ├── components/
-│   │   │   └── Sidebar.tsx        # 全局侧边栏导航
+│   │   │   ├── Sidebar.tsx                 # 全局侧边栏导航
+│   │   │   ├── BackButton.tsx              # 通用返回按钮
+│   │   │   └── PageError.tsx               # 通用错误占位
 │   │   ├── context/
-│   │   │   └── AuthContext.tsx    # 认证上下文
+│   │   │   └── AuthContext.tsx             # 认证上下文
 │   │   └── lib/
-│   │       └── api.ts             # API 客户端封装（24 个导出函数）
+│   │       └── api.ts                      # API 客户端封装（按功能分节）
+│
+└── package.json                            # 根目录脚本（转发前后端命令）
+```
 
-└── package.json               # 根目录脚本（转发前后端命令）
+### 数据库迁移执行顺序
+
+首次部署：
+
+```sql
+-- 1. 基础表
+\i backend/sql/init.sql
+\i backend/sql/init_system_schema.sql
+
+-- 2. 演进迁移（按文件名时间序）
+\i backend/sql/migrations/migrate_chapters.sql
+\i backend/sql/migrations/migrate_chapter_extractions.sql
+\i backend/sql/migrations/migrate_chapter_extractions_v2.sql
+\i backend/sql/migrations/migrate_yaml_drafts.sql
+\i backend/sql/migrations/migrate_yaml_draft_name.sql
+\i backend/sql/migrations/migrate_yaml_exports.sql
+\i backend/sql/migrations/migrate_relationship_graphs.sql
 ```
 
 ## 页面路由
@@ -506,26 +575,26 @@ python -m unittest tests.test_chapter_parser tests.test_extraction_service -v
 > 本次章节操作与提炼入口改造未新增第三方依赖。
 > 本次提炼结果页面（下拉视图/自适应textarea/大元素折叠/小元素CRUD）、导入小说（文件/链接）改造未新增第三方依赖。
 > 本次章节编辑页"导入章节内容→文件导入"链路修复未新增第三方依赖。当前章节文件导入支持 `.txt` / `.md`（自动尝试 UTF-8 with BOM / UTF-8 / GBK / GB2312 / GB18030 编码）/ `.docx`（依赖 `python-docx`）。`.pdf` / `.doc` 暂不支持，会返回 `UNSUPPORTED_FILE_TYPE` 并提示改用文本转换——`.pdf` 取消是因为 PyPDF2 对中文 PDF 与扫描版 PDF 的文本抽取效果不可靠。
-> 本次提炼结果保存与查看逻辑修复未新增第三方依赖。需执行 `backend/sql/migrate_chapter_extractions_v2.sql` 创建 `chapter_extractions` 表。
+> 本次提炼结果保存与查看逻辑修复未新增第三方依赖。需执行 `backend/sql/migrations/migrate_chapter_extractions_v2.sql` 创建 `chapter_extractions` 表。
 > 本次从小说整体提炼自动映射章节提炼内容的功能未新增第三方依赖。
 > 本次章节提炼查看页新增提炼入口与保存逻辑修复未新增第三方依赖。新增端点 `POST /api/chapters/<id>/extract-only`（单章独立 AI 提炼）；ExtractionCard 修复 hook 顺序错误。
 > 本次章节派生提炼增强未新增第三方依赖。改进 `derive_chapter_extraction_from_novel` 从 `chapter_summaries[i]` 内嵌的 `key_events / characters / locations` 提取本章细节；并在 `chapter_extractions` 表缺失时落回 `novel_extractions.user_result_json._chapter_overrides` 兜底存储，保证章节查看页与"提炼章节"按钮在数据库 schema 不完整的情况下也能工作。
 > 本次章节多选提炼与章节提炼结果读取修复未新增第三方依赖。批量提炼改为逐章独立 AI 调用 + 分别保存；Import 页按钮重构（编辑/AI提炼/删除 三按钮联动，非编辑模式 AI提炼 禁用）；章节列表状态改用真实提炼状态。
-> 本次 YAML 剧本生成功能未新增第三方依赖。需执行 `backend/sql/migrate_yaml_drafts.sql` 创建 `yaml_drafts` 表。YAML 草稿 `.yaml` 文件保存于 `backend/data/yaml_drafts/user_<id>/novel_<id>/`。
+> 本次 YAML 剧本生成功能未新增第三方依赖。需执行 `backend/sql/migrations/migrate_yaml_drafts.sql` 创建 `yaml_drafts` 表。YAML 草稿 `.yaml` 文件保存于 `backend/data/yaml_drafts/user_<id>/novel_<id>/`。
 > 本次章节提炼状态同步修复未新增第三方依赖。章节列表接口现在关联 `get_chapter_extraction`（含 fallback）返回每章的 `hasExtraction`/`extractionStatus`，前端标签、按钮、统计全部统一使用该字段。
 > 本次 YAML 剧本生成选择弹窗功能未新增第三方依赖。生成区域增加"选择小说"组件（弹窗选小说+章节）；Schema 改为弹窗选择（系统默认/用户/不使用）。
 > 本次 YAML 剧本编辑器功能未新增第三方依赖。侧边栏新增"YAML 编辑器"入口；编辑器支持 YAML/卡片/双栏三种视图、行号、等宽字体、自动保存、格式化、复制、下载、恢复版本、AI 修复、重新校验、确认最终 YAML。
 > 本次 YAML 根结构修复未新增第三方依赖。系统会对 AI 生成 YAML 做根结构校验，防止出现 `[]` 后接对象字段的非法 YAML；`_fix_yaml_structure()` 自动将 `[]\n    key: value` 修复为 `characters:\n  - key: value`（同缩进块合并为一个数组元素）。
 > 本次 YAML 版本重复生成修复未新增第三方依赖。版本号原子化（DB 查 max+1 + 重复检测递增）；generate_yaml 修复循环仅修改同一条记录不创建多版本；前端按钮请求中 disabled + 文本切换防止重复点击。
-> 本次最终 YAML 剧本导出功能未新增第三方依赖。需执行 `backend/sql/migrate_yaml_exports.sql` 创建 `yaml_exports` 表。
+> 本次最终 YAML 剧本导出功能未新增第三方依赖。需执行 `backend/sql/migrations/migrate_yaml_exports.sql` 创建 `yaml_exports` 表。
 > 本次提炼内容页 YAML 剧本入口状态判断未新增第三方依赖。右上角按钮根据 `getYamlDrafts` 返回结果动态切换"生成 YAML 剧本"/"进入 YAML 剧本"。
 > 本次 YAML 剧本版本多选删除功能未新增第三方依赖。新增批量删除端点 + YAML 页面编辑模式（复选框多选 → 批量软删除）。
 > 本次 DeepSeek YAML 严格生成提示词优化未新增第三方依赖。prompt 强制要求：顶层对象、2空格缩进、数组 `-` 对齐、source_refs 格式铁则、完整结构示例；修复 prompt 限制只修结构不改剧情。
 > 本次 YAML 剧本章节选择全选功能未新增第三方依赖。弹窗章节列表增加"全选已提炼章节"复选框，支持全选/半选/取消三种状态联动。
-> 本次 YAML 版本展示编号与文件名称编辑功能未新增第三方依赖。需执行 `backend/sql/migrate_yaml_draft_name.sql` 增加 `draft_name` 列。展示编号 y1/y2/y3 动态计算；右侧"查看"改为"编辑"（编辑名称弹窗）；行点击查看 YAML 内容；顶部"编辑"改为"批量管理"。
+> 本次 YAML 版本展示编号与文件名称编辑功能未新增第三方依赖。需执行 `backend/sql/migrations/migrate_yaml_draft_name.sql` 增加 `draft_name` 列。展示编号 y1/y2/y3 动态计算；右侧"查看"改为"编辑"（编辑名称弹窗）；行点击查看 YAML 内容；顶部"编辑"改为"批量管理"。
 > 本次 YAML 校验报告优化未新增第三方依赖。`run_comprehensive_validation()` 返回结构化校验结果（语法/Schema/必填字段/类型/source_refs/业务规则共 6 层），前端折叠式校验报告面板支持行号定位和原始错误查看。
 > 本次严格 YAML 生成工具链改造**新增第三方依赖：`jsonschema`**。生成流程从「DeepSeek 直接写 YAML 文本」改为「DeepSeek 输出 JSON 对象 → 后端 `json.loads` 解析 → `jsonschema.Draft7Validator` 按 JSON Schema 校验结构 → `yaml.dump` 序列化为 YAML → `yaml.safe_load` 兜底校验」。由系统统一负责 YAML 缩进、引号、`- ` 对齐、`source_refs` 写法，AI 不再触碰 YAML 文本，根本杜绝缩进与 source_refs 结构错误。AI 修复（`/api/yaml-drafts/<id>/ai-repair`）也改为 JSON-first：把当前 YAML 反序列化为 JSON → 提交给 AI 修复 → 解析 → jsonschema 校验 → 用 `yaml.dump` 重写为 YAML，新建版本保存。
 > 本次 YAML 版本显示名称同步修复未新增第三方依赖。YAML 版本对用户展示统一使用 `y1/y2/y3` 展示编号（根据 `created_at` 时间先后动态计算），数据库内部 `version_number`（v29/v30）仅用于内部追踪，不作为用户主显示。`getDisplayCode` / `getDisplayName` / `sortedActiveDrafts` 公用函数统一 Toast、版本列表、查看弹窗、YAML 编辑器标题、确认/导出/修复提示的名称来源。用户自定义名称后全局同步显示。删除版本后 y 编号自动重新计算。后端生成/修复接口不再在提示消息中暴露内部版本号。
 > 本次 Schema 必填字段校验移除未新增第三方依赖。`validate_against_schema()` 不再逐 key 比对缺失顶层字段；`run_comprehensive_validation()` 的 Schema 结构校验步骤改为仅检查 Schema 自身是否可解析，不因缺少 `source_info` / `adaptation_intent` / `core_story` 等字段报错或阻止确认/导出。YAML 语法校验、字段类型校验、source_refs 校验、业务规则校验全部保留。
 > 本次 YAML 剧本结构预览增强未新增第三方依赖（`js-yaml` 已随 eslint 存在）。右侧"剧本结构预览"从只读 metadata 几个字段改为根据左侧 YAML 原文用 `js-yaml` 完整解析后动态生成：结构概览、metadata、characters 人物列表（含 source_refs）、relationships 人物关系、scenes 场景（含对白/动作计数）、episodes 剧集、source_refs 来源汇总、generation_notes / validation_notes、其他动态字段。各模块可折叠、文本截断、数量统计，左侧 YAML 修改后右侧实时同步。预览仅供阅读，不参与导出。
-> 本次「关系图谱」功能**新增第三方依赖：`cytoscape`**。需执行 `backend/sql/migrate_relationship_graphs.sql` 创建 `relationship_graphs` 表（每用户每小说一条主图谱记录，含 chapter_ids / graph_data_json / status / node_count / edge_count；表缺失时回退内存存储）。左侧侧边栏新增「关系图谱」入口；流程：选择已提炼章节 → DeepSeek 输出严格 graph JSON（nodes / edges / groups）→ 后端校验（id 唯一、edge.source/target 必须命中 nodes、未提炼章节拦截、章节归属校验）→ 持久化。前端 Cytoscape.js cose 力导向布局，节点按 type 上色（9 种柔和配色）、按 importance 调整大小、按 strength 调整边宽。支持顶部胶囊式分类切换（总览/人物/故事/地点/事件/冲突/线索）、章节筛选、节点/边点击查看详情面板（含 source_refs 原文片段）。「添加已提炼章节」追加流程：AI 输出 new_nodes/new_edges/updated_nodes/updated_edges 增量，后端按 id 和 (source,target,type) 自动去重合并旧图谱。仅作为增强功能，不影响 YAML 剧本生成/编辑/导出主流程。
+> 本次「关系图谱」功能**新增第三方依赖：`cytoscape`**。需执行 `backend/sql/migrations/migrate_relationship_graphs.sql` 创建 `relationship_graphs` 表（每用户每小说一条主图谱记录，含 chapter_ids / graph_data_json / status / node_count / edge_count；表缺失时回退内存存储）。左侧侧边栏新增「关系图谱」入口；流程：选择已提炼章节 → DeepSeek 输出严格 graph JSON（nodes / edges / groups）→ 后端校验（id 唯一、edge.source/target 必须命中 nodes、未提炼章节拦截、章节归属校验）→ 持久化。前端 Cytoscape.js cose 力导向布局，节点按 type 上色（9 种柔和配色）、按 importance 调整大小、按 strength 调整边宽。支持顶部胶囊式分类切换（总览/人物/故事/地点/事件/冲突/线索）、章节筛选、节点/边点击查看详情面板（含 source_refs 原文片段）。「添加已提炼章节」追加流程：AI 输出 new_nodes/new_edges/updated_nodes/updated_edges 增量，后端按 id 和 (source,target,type) 自动去重合并旧图谱。仅作为增强功能，不影响 YAML 剧本生成/编辑/导出主流程。
