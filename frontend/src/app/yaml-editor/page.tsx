@@ -7,6 +7,7 @@ import * as api from '@/lib/api';
 import { sortedActiveDrafts, getDisplayCode, getDisplayName } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import BackButton from '@/components/BackButton';
+import YamlStructurePreview from './YamlStructurePreview';
 
 function showToast(message: string, type: 'success' | 'error') {
   const existing = document.getElementById('toast');
@@ -504,8 +505,8 @@ function YamlEditorInner() {
 
           {/* Card preview */}
           {(viewMode === 'cards' || viewMode === 'dual') && (
-            <div className={`overflow-y-auto p-4 min-h-0 ${viewMode === 'dual' ? 'w-[45%]' : 'flex-1'}`}>
-              <div className="text-center py-16 text-sm text-ink-light">YAML 卡片预览（基础版）。</div>
+            <div className={`overflow-y-auto min-h-0 ${viewMode === 'dual' ? 'w-[45%]' : 'flex-1'}`}>
+              <YamlStructurePreview yamlText={yamlContent} />
             </div>
           )}
         </div>
