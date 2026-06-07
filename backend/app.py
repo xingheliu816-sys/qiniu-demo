@@ -430,6 +430,82 @@ def api_save_chapter(chapter_id):
         return jsonify({"success": False, "message": "保存失败"}), 500
 
 
+@app.route('/api/chapters/<int:chapter_id>/import-text-preview', methods=['POST', 'OPTIONS'])
+@login_required
+def api_import_text_preview(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.db import get_db
+    import re
+    try:
+        db = get_db()
+        owned = db.table('chapters').select('id, novel_id').eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not owned.data:
+            return jsonify({"success": False, "message": "无权限导入章节内容。"}), 403
+
+        data = request.get_json()
+        if not data or not data.get('text', '').strip():
+            return jsonify({"success": False, "message": "章节内容不能为空"}), 400
+
+        text = data['text'].strip()
+        lines = text.split('\n')
+        chapter_pattern = re.compile(r'^(第[零一二三四五六七八九十百千万\d]+章\s*.*|第\d+章\s*.*|Chapter\s+\d+.*|序章\s*.*|楔子\s*.*|番外\s*.*)$', re.IGNORECASE)
+        first_line = lines[0].strip() if lines else ''
+        title = first_line
+        content = text
+        if first_line and chapter_pattern.match(first_line):
+            title = first_line
+            content = '\n'.join(lines[1:]).strip()
+        elif not first_line:
+            title = '未命名章节'
+        else:
+            content = '\n'.join(lines[1:]).strip()
+        return jsonify({"success": True, "data": {"title": title, "content": content or text}})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({"success": False, "message": "解析失败"}), 500
+
+
+@app.route('/api/chapters/<int:chapter_id>/import-file-preview', methods=['POST', 'OPTIONS'])
+@login_required
+def api_import_file_preview(chapter_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.db import get_db
+    from src.file_text_extractor import extract_text_from_file
+    import re
+    try:
+        db = get_db()
+        owned = db.table('chapters').select('id, novel_id').eq('id', chapter_id).eq('user_id', session['user_id']).execute()
+        if not owned.data:
+            return jsonify({"success": False, "message": "无权限导入章节内容。"}), 403
+
+        if 'file' not in request.files:
+            return jsonify({"success": False, "message": "请先选择文件。"}), 400
+        file = request.files['file']
+        ok, text_or_err, err_msg = extract_text_from_file(file)
+        if not ok:
+            return jsonify({"success": False, "message": err_msg or '文件解析失败，请检查文件内容或改用文本转换。'}), 400
+        text = text_or_err
+
+        lines = text.split('\n')
+        chapter_pattern = re.compile(r'^(第[零一二三四五六七八九十百千万\d]+章\s*.*|第\d+章\s*.*|Chapter\s+\d+.*|序章\s*.*|楔子\s*.*|番外\s*.*)$', re.IGNORECASE)
+        first_line = lines[0].strip() if lines else ''
+        title = first_line
+        content = text
+        if first_line and chapter_pattern.match(first_line):
+            title = first_line
+            content = '\n'.join(lines[1:]).strip()
+        elif not first_line:
+            title = '未命名章节'
+        else:
+            content = '\n'.join(lines[1:]).strip()
+        return jsonify({"success": True, "data": {"title": title, "content": content or text}})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({"success": False, "message": "文件解析失败，请检查文件内容或改用文本转换。"}), 500
+
+
 def _parse_chapters_for_extract(db, chapter_rows):
     """对给定章节执行原识别前置逻辑，并写回 parse_status / word_count / content。
 
@@ -951,6 +1027,159 @@ def api_source_ref(novel_id):
     except Exception as e:
         log_api_error(e)
         return jsonify({"success": False, "message": "获取原文依据失败"}), 500
+
+
+# ===== YAML Schema 规则库 =====
+
+
+@app.route('/api/schemas', methods=['GET', 'OPTIONS'])
+@login_required
+def api_get_schemas():
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.schema_service import get_schemas
+    try:
+        result = get_schemas(session['user_id'])
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '获取 Schema 列表失败'}), 500
+
+
+@app.route('/api/schemas/<int:schema_id>', methods=['GET', 'OPTIONS'])
+@login_required
+def api_get_schema(schema_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.schema_service import get_schema_detail
+    try:
+        schema = get_schema_detail(schema_id, session['user_id'])
+        if not schema:
+            return jsonify({'success': False, 'message': 'Schema 不存在或无权访问'}), 404
+        return jsonify({'success': True, 'schema': schema})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '获取 Schema 详情失败'}), 500
+
+
+@app.route('/api/schemas/create', methods=['POST', 'OPTIONS'])
+@login_required
+def api_create_schema():
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    description = data.get('description', '').strip()
+    schema_type = data.get('schemaType', 'custom')
+    content_format = data.get('contentFormat', 'yaml')
+    content = data.get('content', '')
+    if not content:
+        return jsonify({'success': False, 'message': 'Schema 内容不能为空'}), 400
+    from src.schema_service import create_schema
+    try:
+        schema_id, err = create_schema(
+            session['user_id'], name, description, schema_type, content_format, content
+        )
+        if err:
+            return jsonify({'success': False, 'message': err}), 400
+        return jsonify({'success': True, 'schemaId': schema_id})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '创建 Schema 失败'}), 500
+
+
+@app.route('/api/schemas/<int:schema_id>/update', methods=['POST', 'OPTIONS'])
+@login_required
+def api_update_schema(schema_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json() or {}
+    from src.schema_service import update_schema
+    try:
+        ok, msg = update_schema(
+            schema_id, session['user_id'],
+            name=data.get('name'), description=data.get('description'),
+            schema_type=data.get('schemaType'), content_format=data.get('contentFormat'),
+            content=data.get('content'),
+        )
+        if not ok:
+            if msg == '系统默认 Schema 不支持直接编辑。':
+                return jsonify({
+                    'success': False,
+                    'error': {'code': 'SYSTEM_SCHEMA_READONLY', 'message': '系统默认 Schema 不支持直接编辑。'},
+                    'message': '系统默认 Schema 不支持直接编辑。',
+                }), 403
+            return jsonify({'success': False, 'message': msg}), 400
+        return jsonify({'success': True, 'message': 'Schema 已更新。'})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '更新 Schema 失败'}), 500
+
+
+@app.route('/api/schemas/<int:schema_id>/delete', methods=['POST', 'OPTIONS'])
+@login_required
+def api_delete_schema(schema_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.schema_service import delete_schema
+    try:
+        ok, msg = delete_schema(schema_id, session['user_id'])
+        if not ok:
+            if msg == '系统默认 Schema 不支持删除。':
+                return jsonify({
+                    'success': False,
+                    'error': {'code': 'SYSTEM_SCHEMA_READONLY', 'message': '系统默认 Schema 不支持删除。'},
+                    'message': '系统默认 Schema 不支持删除。',
+                }), 403
+            return jsonify({'success': False, 'message': msg}), 400
+        return jsonify({'success': True, 'message': 'Schema 已删除。'})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '删除 Schema 失败'}), 500
+
+
+@app.route('/api/schemas/<int:schema_id>/copy', methods=['POST', 'OPTIONS'])
+@login_required
+def api_copy_schema(schema_id):
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    from src.schema_service import copy_schema
+    try:
+        new_id, err = copy_schema(schema_id, session['user_id'])
+        if err:
+            return jsonify({'success': False, 'message': err}), 400
+        return jsonify({'success': True, 'schemaId': new_id})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '复制 Schema 失败'}), 500
+
+
+@app.route('/api/schemas/set-default', methods=['POST', 'OPTIONS'])
+@login_required
+def api_set_default_schema():
+    if request.method == 'OPTIONS':
+        return jsonify({})
+    data = request.get_json() or {}
+    schema_id = data.get('schemaId')
+    from src.schema_service import set_default_schema
+    try:
+        ok, msg = set_default_schema(schema_id, session['user_id'])
+        if not ok:
+            return jsonify({'success': False, 'message': msg}), 400
+        return jsonify({'success': True, 'message': '默认 Schema 已更新。'})
+    except Exception as e:
+        log_api_error(e)
+        return jsonify({'success': False, 'message': '设置默认 Schema 失败'}), 500
+
+
+# 启动时初始化系统默认 Schema
+with app.app_context():
+    try:
+        from src.schema_service import init_system_schema
+        init_system_schema()
+        print('[Init] 系统默认 Schema 检查完成')
+    except Exception as e:
+        print(f'[Init] 系统默认 Schema 初始化失败: {e}')
 
 
 if __name__ == '__main__':
