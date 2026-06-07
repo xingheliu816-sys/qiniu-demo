@@ -2,3 +2,4 @@ Flask
 supabase
 requests
 PyYAML
+jsonschema

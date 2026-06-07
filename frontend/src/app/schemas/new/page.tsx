@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 
 export default function NewSchemaPage() {
   const { username, isLoading } = useAuth();
@@ -48,10 +49,12 @@ export default function NewSchemaPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton href="/schemas" />
+      </div>
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <div className="mb-6">
-          <button onClick={() => router.push('/schemas')} className="text-sm text-ink-light hover:text-ink transition-colors mb-2">&larr; 返回</button>
-          <h2 className="text-xl font-serif font-bold text-ink">新建 Schema</h2>
+          <h2 className="text-xl font-serif font-bold text-ink mb-4">新建 Schema</h2>
         </div>
         {error && <div className="mb-4 px-4 py-2 bg-error/10 text-error text-sm rounded-lg">{error}</div>}
         <div className="space-y-4">
