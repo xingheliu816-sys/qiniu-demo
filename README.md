@@ -1,5 +1,7 @@
 # Novel2Script AI
-
+## demo演示视频链接：通过网盘分享的文件：novel2script demo讲解.mp4
+链接: https://pan.baidu.com/s/1LpdBXlH92mbeSCclV7Egvw?pwd=jbbh 提取码: jbbh 
+--来自百度网盘超级会员v3的分享
 ## 项目简介
 
 Novel2Script AI 是一个小说转剧本 AI 工具。当前阶段实现了三大功能：**用户登录与小说导入章节识别**、**AI 小说提炼**（故事骨干 JSON 中间层）、**YAML Schema 规则库**（为后续 YAML 剧本草稿生成提供规则约束）。
