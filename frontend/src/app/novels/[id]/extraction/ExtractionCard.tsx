@@ -84,6 +84,101 @@ function AutoTextarea({ value, onChange, placeholder, className }: {
   );
 }
 
+interface CollapsibleArrayItemProps {
+  item: Record<string, unknown>;
+  index: number;
+  arrayValue: Record<string, unknown>[];
+  onChange: (next: unknown) => void;
+  onRequestDelete: (index: number) => void;
+  onOpenSourceRef?: (chapterId: number, startOffset: number, endOffset: number) => void;
+}
+
+function CollapsibleArrayItem({ item, index, arrayValue, onChange, onRequestDelete, onOpenSourceRef }: CollapsibleArrayItemProps) {
+  const [itemOpen, setItemOpen] = useState(true);
+  const label = getItemLabel(item);
+  const sourceRefs = extractSourceRefs(item);
+
+  function updateItemField(key: string, nextValue: string) {
+    const next = arrayValue.map((it, i) => i === index ? { ...it, [key]: nextValue } : it);
+    onChange(next);
+  }
+
+  function updateItemFieldRaw(key: string, nextValue: unknown) {
+    const next = arrayValue.map((it, i) => i === index ? { ...it, [key]: nextValue } : it);
+    onChange(next);
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden bg-paper/30">
+      <div className="flex items-center justify-between px-3 py-2 bg-paper/50 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setItemOpen(o => !o)}
+          className="flex-1 text-left text-sm font-medium text-ink hover:text-accent transition-colors truncate"
+        >
+          {index + 1}. {label || `项目 ${index + 1}`}
+        </button>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          <button
+            type="button"
+            onClick={() => setItemOpen(o => !o)}
+            className="text-xs text-ink-light hover:text-accent transition-colors"
+          >
+            {itemOpen ? '收起' : '展开'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRequestDelete(index)}
+            className="text-xs text-error hover:text-error/80 transition-colors"
+          >
+            删除
+          </button>
+        </div>
+      </div>
+      {itemOpen && (
+        <div className="p-3 space-y-2">
+          {Object.entries(item).filter(([k]) => k !== 'source_refs').map(([key, fieldValue]) => {
+            if (typeof fieldValue === 'string') {
+              return (
+                <div key={key}>
+                  <label className="block text-xs text-ink-light mb-0.5">{key}</label>
+                  <AutoTextarea
+                    value={fieldValue}
+                    onChange={(v) => updateItemField(key, v)}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div key={key}>
+                <label className="block text-xs text-ink-light mb-0.5">{key}</label>
+                <AutoTextarea
+                  value={asString(fieldValue)}
+                  onChange={(v) => updateItemFieldRaw(key, parseJsonOrKeep(v))}
+                />
+              </div>
+            );
+          })}
+          {sourceRefs.length > 0 && onOpenSourceRef && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {sourceRefs.map((ref, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => onOpenSourceRef(ref.chapter_id || 0, ref.start_offset || 0, ref.end_offset || 0)}
+                  className="text-xs px-2 py-0.5 rounded border border-border bg-paper hover:bg-accent/10 hover:border-accent/40 hover:text-accent transition-colors"
+                >
+                  查看依据 · {ref.chapter_title || `章节 ${ref.chapter_id}`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ExtractionCard({ title, subtitle, value, onChange, onOpenSourceRef, showDelete, onDelete }: ExtractionCardProps) {
   const [viewMode, setViewMode] = useState<'form' | 'json'>('form');
   const [expanded, setExpanded] = useState(true);
@@ -209,73 +304,6 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
     );
   }, [onChange, renderSourceRefs]);
 
-  const renderCollapsibleItem = useCallback((item: Record<string, unknown>, index: number, isNested: boolean) => {
-    const [itemOpen, setItemOpen] = useState(true);
-    const label = getItemLabel(item);
-    const sourceRefs = extractSourceRefs(item);
-    return (
-      <div key={index} className="border border-border rounded-lg overflow-hidden bg-paper/30">
-        <div className="flex items-center justify-between px-3 py-2 bg-paper/50 border-b border-border">
-          <button
-            type="button"
-            onClick={() => setItemOpen(o => !o)}
-            className="flex-1 text-left text-sm font-medium text-ink hover:text-accent transition-colors truncate"
-          >
-            {index + 1}. {label || `项目 ${index + 1}`}
-          </button>
-          <div className="flex items-center gap-2 shrink-0 ml-2">
-            <button
-              type="button"
-              onClick={() => setItemOpen(o => !o)}
-              className="text-xs text-ink-light hover:text-accent transition-colors"
-            >
-              {itemOpen ? '收起' : '展开'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(index)}
-              className="text-xs text-error hover:text-error/80 transition-colors"
-            >
-              删除
-            </button>
-          </div>
-        </div>
-        {itemOpen && (
-          <div className="p-3 space-y-2">
-            {Object.entries(item).filter(([k]) => k !== 'source_refs').map(([key, fieldValue]) => {
-              if (typeof fieldValue === 'string') {
-                return (
-                  <div key={key}>
-                    <label className="block text-xs text-ink-light mb-0.5">{key}</label>
-                    <AutoTextarea
-                      value={fieldValue}
-                      onChange={(v) => updateArrayItem(index, key, v)}
-                    />
-                  </div>
-                );
-              }
-              return (
-                <div key={key}>
-                  <label className="block text-xs text-ink-light mb-0.5">{key}</label>
-                  <AutoTextarea
-                    value={asString(fieldValue)}
-                    onChange={(v) => {
-                      const next = (value as Record<string, unknown>[]).map((it, i) =>
-                        i === index ? { ...it, [key]: parseJsonOrKeep(v) } : it
-                      );
-                      onChange(next);
-                    }}
-                  />
-                </div>
-              );
-            })}
-            {sourceRefs.length > 0 && renderSourceRefs(sourceRefs)}
-          </div>
-        )}
-      </div>
-    );
-  }, [value, onChange, renderSourceRefs]);
-
   return (
     <section className="bg-card border border-border rounded-xl overflow-hidden">
       <header
@@ -374,7 +402,17 @@ export default function ExtractionCard({ title, subtitle, value, onChange, onOpe
               {(value as Record<string, unknown>[]).length === 0 && (
                 <p className="text-sm text-ink-light italic">暂无内容。</p>
               )}
-              {(value as Record<string, unknown>[]).map((item, index) => renderCollapsibleItem(item, index, false))}
+              {(value as Record<string, unknown>[]).map((item, index) => (
+                <CollapsibleArrayItem
+                  key={index}
+                  item={item}
+                  index={index}
+                  arrayValue={value as Record<string, unknown>[]}
+                  onChange={onChange}
+                  onRequestDelete={setDeleteTarget}
+                  onOpenSourceRef={onOpenSourceRef}
+                />
+              ))}
               <button
                 type="button"
                 onClick={addArrayItem}

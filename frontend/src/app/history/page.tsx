@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 
 export default function HistoryPage() {
   const { username, isLoading } = useAuth();
@@ -47,6 +48,9 @@ export default function HistoryPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton />
+      </div>
 
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <h2 className="text-xl font-serif font-bold text-ink mb-6">我的导入与提炼记录</h2>
