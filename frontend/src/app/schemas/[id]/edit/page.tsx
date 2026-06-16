@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 
 export default function EditSchemaPage() {
   const { username, isLoading } = useAuth();
@@ -67,9 +68,11 @@ export default function EditSchemaPage() {
     return (
       <div className="flex-1 flex">
         <Sidebar />
+        <div className="fixed right-3 top-3 z-40">
+          <BackButton href="/schemas" />
+        </div>
         <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
           <p className="text-center py-16 text-sm text-ink-light">系统默认 Schema 不允许编辑。</p>
-          <div className="text-center"><button onClick={() => router.push('/schemas')} className="text-accent hover:text-accent-hover text-sm">返回 Schema 列表</button></div>
         </main>
       </div>
     );
@@ -78,9 +81,13 @@ export default function EditSchemaPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton href={`/schemas/${schemaId}`} />
+      </div>
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
-        <button onClick={() => router.push(`/schemas/${schemaId}`)} className="text-sm text-ink-light hover:text-ink transition-colors mb-2">&larr; 返回详情</button>
-        <h2 className="text-xl font-serif font-bold text-ink mb-4">编辑 Schema</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-serif font-bold text-ink">编辑 Schema</h2>
+        </div>
         {error && <div className="mb-4 px-4 py-2 bg-error/10 text-error text-sm rounded-lg">{error}</div>}
         <div className="space-y-4">
           <div>

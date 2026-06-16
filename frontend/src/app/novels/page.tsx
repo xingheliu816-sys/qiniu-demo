@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ConfirmModal from './ConfirmModal';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 import ImportForm from '@/components/ImportForm';
 import PageError from '@/components/PageError';
 
@@ -18,6 +19,13 @@ export default function NovelsPage() {
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [showImport, setShowImport] = useState(false);
+
+  // Edit modal state
+  const [editTarget, setEditTarget] = useState<number | null>(null);
+  const [editNovelTitle, setEditNovelTitle] = useState('');
+  const [editChapters, setEditChapters] = useState<{ id: number; title: string; chapter_index: number }[]>([]);
+  const [editChangedChapters, setEditChangedChapters] = useState<Set<number>>(new Set());
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !username) {
@@ -77,6 +85,57 @@ export default function NovelsPage() {
     }
   }
 
+  async function openEditModal(e: React.MouseEvent, novelId: number, novelTitle: string) {
+    e.stopPropagation();
+    setEditTarget(novelId);
+    setEditNovelTitle(novelTitle || '');
+    setEditChangedChapters(new Set());
+    setEditSaving(false);
+    // 加载该小说的章节列表
+    try {
+      const chList = await api.getChapters(novelId);
+      setEditChapters((chList.chapters || []).map(c => ({ id: c.id, title: c.title, chapter_index: c.chapter_index })));
+    } catch {
+      setEditChapters([]);
+    }
+  }
+
+  function closeEditModal() {
+    setEditTarget(null);
+    setEditNovelTitle('');
+    setEditChapters([]);
+    setEditChangedChapters(new Set());
+  }
+
+  function updateChapterTitle(chapterId: number, newTitle: string) {
+    setEditChapters(prev => prev.map(c => c.id === chapterId ? { ...c, title: newTitle } : c));
+    setEditChangedChapters(prev => new Set(prev).add(chapterId));
+  }
+
+  async function saveAllEdits() {
+    if (!editTarget) return;
+    setEditSaving(true);
+    try {
+      // 1) 如果小说名变了，更新小说名
+      const origNovel = novels.find(n => n.id === editTarget);
+      if (origNovel && editNovelTitle.trim() && editNovelTitle.trim() !== (origNovel.title || '')) {
+        await api.renameNovel(editTarget, editNovelTitle.trim());
+        setNovels(prev => prev.map(n => n.id === editTarget ? { ...n, title: editNovelTitle.trim() } : n));
+      }
+      // 2) 逐章保存被修改的章节名
+      for (const ch of editChapters) {
+        if (editChangedChapters.has(ch.id) && ch.title.trim()) {
+          await api.renameChapter(ch.id, ch.title.trim());
+        }
+      }
+      closeEditModal();
+    } catch {
+      // ignore
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   const statusTextMap: Record<string, { label: string; cls: string }> = {
     draft: { label: '草稿', cls: 'bg-warning/10 text-warning' },
     imported: { label: '已保存', cls: 'bg-success/10 text-success' },
@@ -120,6 +179,9 @@ export default function NovelsPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton />
+      </div>
 
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
@@ -162,7 +224,6 @@ export default function NovelsPage() {
                         <div className="flex-1 min-w-0">
                           <h4 className="text-base font-serif font-bold text-ink truncate">{novel.title || '未命名'}</h4>
                           <div className="flex items-center gap-4 mt-1.5 text-xs text-ink-light">
-                            <span>{novel.total_word_count} 字</span>
                             <span>{novel.chapter_count} 章</span>
                             <span>{novel.updated_at ? novel.updated_at.substring(0, 10) : ''}</span>
                             {canExtract && (
@@ -182,6 +243,10 @@ export default function NovelsPage() {
                               {extInfo.cta}
                             </button>
                           )}
+                          <button onClick={(e) => openEditModal(e, novel.id, novel.title)}
+                            className="text-xs text-ink-light hover:text-ink transition-colors">
+                            编辑
+                          </button>
                           <button onClick={(e) => handleDelete(e, novel.id, novel.title)}
                             className="text-xs text-error hover:text-error/80 transition-colors">
                             删除
@@ -204,7 +269,6 @@ export default function NovelsPage() {
                       <div className="flex-1 min-w-0">
                         <h4 className="text-base font-serif font-bold text-ink truncate">{novel.title || '未命名'}</h4>
                         <div className="flex items-center gap-4 mt-1.5 text-xs text-ink-light">
-                          <span>{novel.total_word_count} 字</span>
                           <span>{novel.chapter_count} 章</span>
                           <span>{novel.updated_at ? novel.updated_at.substring(0, 10) : ''}</span>
                         </div>
@@ -213,6 +277,10 @@ export default function NovelsPage() {
                         <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${getNovelStatus(novel).cls}`}>
                           {getNovelStatus(novel).label}
                         </span>
+                        <button onClick={(e) => openEditModal(e, novel.id, novel.title)}
+                          className="text-xs text-ink-light hover:text-ink transition-colors">
+                          编辑
+                        </button>
                         <button onClick={(e) => handleDelete(e, novel.id, novel.title)}
                           className="text-xs text-error hover:text-error/80 transition-colors">
                           删除
@@ -235,6 +303,61 @@ export default function NovelsPage() {
           </div>
         )}
       </main>
+
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={closeEditModal}>
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-serif font-bold text-ink">编辑小说信息</h3>
+              <button onClick={closeEditModal} className="text-ink-light hover:text-ink text-lg leading-none">&times;</button>
+            </div>
+
+            {/* Novel title */}
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-ink-light mb-1">小说名称</label>
+              <input
+                value={editNovelTitle}
+                onChange={(e) => setEditNovelTitle(e.target.value)}
+                className="w-full px-3 py-2 bg-paper border border-border rounded-lg text-sm text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
+                maxLength={255}
+              />
+            </div>
+
+            {/* Chapter list */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <label className="block text-xs font-medium text-ink-light mb-2">章节名称</label>
+              {editChapters.length === 0 ? (
+                <p className="text-sm text-ink-light py-4 text-center">暂无章节</p>
+              ) : (
+                <div className="space-y-2">
+                  {editChapters.map(ch => (
+                    <div key={ch.id} className="flex items-center gap-3">
+                      <span className="text-xs text-ink-light shrink-0 w-8 text-right">{ch.chapter_index}.</span>
+                      <input
+                        value={ch.title}
+                        onChange={(e) => updateChapterTitle(ch.id, e.target.value)}
+                        className="flex-1 px-3 py-2 bg-paper border border-border rounded-lg text-sm text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
+                        maxLength={255}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border">
+              <button onClick={closeEditModal} className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-border rounded-lg transition-colors">
+                取消
+              </button>
+              <button onClick={saveAllEdits} disabled={editSaving || !editNovelTitle.trim()}
+                className="px-4 py-2 text-sm bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg transition-colors">
+                {editSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteTarget && (
         <ConfirmModal

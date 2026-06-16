@@ -88,3 +88,31 @@ CREATE TABLE IF NOT EXISTS chapter_extractions (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   UNIQUE(chapter_id)
 );
+
+-- YAML Schema 规则库（功能 3）
+-- user_id 为 NULL 表示系统默认 Schema
+CREATE TABLE IF NOT EXISTS yaml_schemas (
+  id SERIAL PRIMARY KEY,
+  user_id INT NULL REFERENCES users(id),
+  name VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  schema_type VARCHAR(50) NOT NULL DEFAULT 'custom',
+  content_format VARCHAR(20) NOT NULL DEFAULT 'yaml',
+  content TEXT NOT NULL DEFAULT '',
+  is_default SMALLINT NOT NULL DEFAULT 0,
+  is_system SMALLINT NOT NULL DEFAULT 0,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  source_type VARCHAR(30) NOT NULL DEFAULT 'manual',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- 用户 Schema 偏好表（记录每个用户的默认 Schema）
+CREATE TABLE IF NOT EXISTS user_schema_preferences (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id),
+  default_schema_id INT NULL REFERENCES yaml_schemas(id),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id)
+);

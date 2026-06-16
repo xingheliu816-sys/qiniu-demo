@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import ExtractionCard from './ExtractionCard';
 import SourceRefDrawer from './SourceRefDrawer';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 import PageError from '@/components/PageError';
 
 const SECTION_ORDER: { key: keyof api.ExtractionResult; title: string; subtitle: string; module: string }[] = [
@@ -161,11 +162,13 @@ function showToast(message: string, type: 'success' | 'error') {
   setTimeout(() => toast.remove(), 3000);
 }
 
-export default function NovelExtractionPage() {
+function NovelExtractionInner() {
   const { username, isLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const novelId = Number(params.id);
+  const viewMode = searchParams.get('saved') === '1';  // saved=1 → 只读查看模式
 
   const [novelTitle, setNovelTitle] = useState('');
   const [pageLoading, setPageLoading] = useState(true);
@@ -175,6 +178,7 @@ export default function NovelExtractionPage() {
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
 
   const [status, setStatus] = useState<Status>('not_started');
+  const [hasYamlDrafts, setHasYamlDrafts] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [aiResult, setAiResult] = useState<api.ExtractionResult | null>(null);
   const [userResult, setUserResult] = useState<api.ExtractionResult | null>(null);
@@ -196,6 +200,8 @@ export default function NovelExtractionPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [chapterSaveStatus, setChapterSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [addSectionOpen, setAddSectionOpen] = useState(false);
+  const [chapterExtractionStatuses, setChapterExtractionStatuses] = useState<api.ChapterExtractionItem[]>([]);
+  const [chapterExtracting, setChapterExtracting] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !username) router.replace('/login');
@@ -233,6 +239,13 @@ export default function NovelExtractionPage() {
         setAiResult(ext.aiResult);
         setUserResult(ext.userResult);
         setErrorMessage(ext.errorMessage || '');
+        setChapterExtractionStatuses(ext.chapterExtractions || []);
+
+        // 检查是否有 YAML 草稿
+        try {
+          const yamlDrafts = await api.getYamlDrafts(novelId);
+          setHasYamlDrafts((yamlDrafts.drafts || []).filter(d => d.status !== 'deleted').length > 0);
+        } catch { setHasYamlDrafts(false); }
       } else {
         setPageError({ code: 'EXTRACTION_ERROR', message: ext.message || '获取提炼数据失败' });
       }
@@ -252,12 +265,75 @@ export default function NovelExtractionPage() {
     return userResult || aiResult || {};
   }, [userResult, aiResult]);
 
+  // Filter sections by module and search
+  const sectionsFilteredByModule = useMemo(() => {
+    let sections = SECTION_ORDER;
+    if (moduleFilter) {
+      sections = sections.filter(s => s.module === moduleFilter);
+    }
+    if (searchFilter.trim()) {
+      const q = searchFilter.trim().toLowerCase();
+      sections = sections.filter(s => s.title.toLowerCase().includes(q) || s.subtitle.toLowerCase().includes(q));
+    }
+    return sections;
+  }, [moduleFilter, searchFilter]);
+
+  // Custom sections
+  const allDisplaySections = useMemo(() => {
+    const standard = sectionsFilteredByModule.map(s => ({ key: s.key, isCustom: false as const }));
+    const customs = customSections
+      .filter(cs => {
+        if (moduleFilter && moduleFilter !== '_custom') return false;
+        if (searchFilter.trim() && !cs.name.toLowerCase().includes(searchFilter.trim().toLowerCase())) return false;
+        return true;
+      })
+      .map(cs => ({ key: cs.sectionKey, isCustom: true as const }));
+    return [...standard, ...customs];
+  }, [sectionsFilteredByModule, customSections, moduleFilter, searchFilter]);
+
   function patchSection<K extends keyof api.ExtractionResult>(key: K, next: api.ExtractionResult[K]) {
     setUserResult(prev => ({ ...(prev || aiResult || {}), [key]: next }));
     if (status === 'extracted' || status === 'confirmed') {
       setStatus('editing');
     }
   }
+
+  // 章节选中时加载该章提炼数据（只读，不调 AI）
+  useEffect(() => {
+    if (!selectedChapterId) {
+      setChapterExtractionData(null);
+      setChapterSaveStatus('idle');
+      setIsDirty(false);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await api.getChapterExtraction(selectedChapterId!);
+        if (cancelled) return;
+        if (res.success && res.extraction) {
+          setChapterExtractionData(res.extraction as api.ExtractionResult);
+          // 派生成功后刷新状态列表，让该章显示"已提炼"
+          setChapterExtractionStatuses(prev => {
+            const found = prev.find(s => s.chapterId === selectedChapterId);
+            if (found) {
+              return prev.map(s => s.chapterId === selectedChapterId
+                ? { ...s, status: 'extracted', extraction: res.extraction as Record<string, unknown> }
+                : s,
+              );
+            }
+            return prev;
+          });
+        } else {
+          setChapterExtractionData(null);
+        }
+      } catch {
+        if (!cancelled) setChapterExtractionData(null);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [selectedChapterId]);
 
   // Chapter editing functions
   function patchChapterSection(key: string, value: unknown) {
@@ -284,11 +360,52 @@ export default function NovelExtractionPage() {
     setChapterSaveStatus('idle');
   }
 
+  // 单章独立 AI 提炼：只对当前章节调 AI，保存到 chapter_extractions
+  async function handleChapterExtractOnly() {
+    if (!selectedChapterId || chapterExtracting) return;
+    const isRetry = !!chapterExtractionData && Object.keys(chapterExtractionData).length > 0;
+    if (isRetry) {
+      const ok = window.confirm('重新提炼会生成新的章节提炼结果，是否继续？');
+      if (!ok) return;
+    }
+    setChapterExtracting(true);
+    try {
+      const res = await api.extractChapterOnly(selectedChapterId);
+      if (!res.success) {
+        showToast(res.message || '章节提炼失败，请稍后重试。', 'error');
+        return;
+      }
+      showToast('章节提炼完成', 'success');
+      // 重新读取最新已保存结果，确保以后端为准
+      const fresh = await api.getChapterExtraction(selectedChapterId);
+      if (fresh.success && fresh.extraction) {
+        setChapterExtractionData(fresh.extraction as api.ExtractionResult);
+        setIsDirty(false);
+        setChapterSaveStatus('idle');
+        // 同步章节列表状态
+        setChapterExtractionStatuses(prev => {
+          const found = prev.find(s => s.chapterId === selectedChapterId);
+          if (found) {
+            return prev.map(s => s.chapterId === selectedChapterId
+              ? { ...s, status: 'extracted', extraction: fresh.extraction as Record<string, unknown> }
+              : s,
+            );
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '章节提炼失败，请稍后重试。', 'error');
+    } finally {
+      setChapterExtracting(false);
+    }
+  }
+
   async function handleChapterSave() {
     if (!selectedChapterId || !chapterExtractionData) return;
     setChapterSaveStatus('saving');
     try {
-      const res = await api.saveExtraction(novelId, chapterExtractionData);
+      const res = await api.saveChapterExtraction(selectedChapterId, chapterExtractionData);
       if (res.success) {
         setChapterSaveStatus('saved');
         setIsDirty(false);
@@ -402,57 +519,63 @@ export default function NovelExtractionPage() {
     return found?.subtitle;
   }
 
-  // Filter sections by module and search
-  const sectionsFilteredByModule = useMemo(() => {
-    let sections = SECTION_ORDER;
-    if (moduleFilter) {
-      sections = sections.filter(s => s.module === moduleFilter);
-    }
-    if (searchFilter.trim()) {
-      const q = searchFilter.trim().toLowerCase();
-      sections = sections.filter(s => s.title.toLowerCase().includes(q) || s.subtitle.toLowerCase().includes(q));
-    }
-    return sections;
-  }, [moduleFilter, searchFilter]);
-
-  // Custom sections
-  const allDisplaySections = useMemo(() => {
-    const standard = sectionsFilteredByModule.map(s => ({ key: s.key, isCustom: false as const }));
-    const customs = customSections
-      .filter(cs => {
-        if (moduleFilter && moduleFilter !== '_custom') return false;
-        if (searchFilter.trim() && !cs.name.toLowerCase().includes(searchFilter.trim().toLowerCase())) return false;
-        return true;
-      })
-      .map(cs => ({ key: cs.sectionKey, isCustom: true as const }));
-    return [...standard, ...customs];
-  }, [sectionsFilteredByModule, customSections, moduleFilter, searchFilter]);
-
   const selectedChapter = selectedChapterId ? chapters.find(ch => ch.id === selectedChapterId) : null;
 
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton />
+      </div>
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-8 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-xl font-serif font-bold text-ink truncate">{novelTitle || '未命名'}</h2>
             <p className="text-sm text-ink-light mt-1">
-              {selectedChapter
+              {viewMode && !selectedChapter && '查看已保存提炼内容'}
+              {!viewMode && selectedChapter
                 ? `第 ${selectedChapter.chapter_index} 章 · ${selectedChapter.title} · 章节提炼编辑`
-                : '小说提炼 · 故事骨干 JSON 中间层'}
+                : !viewMode && '小说提炼 · 故事骨干 JSON 中间层'}
+              {viewMode && selectedChapter && `第 ${selectedChapter.chapter_index} 章 · ${selectedChapter.title} · 查看章节提炼`}
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <span className={`shrink-0 px-3 py-1 rounded text-xs font-medium ${tone.tone}`}>{tone.label}</span>
+            {hasExtraction && !selectedChapter && (
+              <button
+                onClick={() => router.push(`/novels/${novelId}/yaml`)}
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {hasYamlDrafts ? '进入 YAML 剧本' : '生成 YAML 剧本'}
+              </button>
+            )}
             {selectedChapter && (
+              <button
+                onClick={handleChapterExtractOnly}
+                disabled={chapterExtracting}
+                className="px-4 py-2 bg-success hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {chapterExtracting
+                  ? '提炼中...'
+                  : (chapterExtractionData && Object.keys(chapterExtractionData).length > 0 ? '重新提炼' : '提炼章节')}
+              </button>
+            )}
+            {selectedChapter && !viewMode && (
               <button
                 onClick={handleChapterSave}
                 disabled={chapterSaveStatus === 'saving' || !isDirty}
                 className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
               >
                 {chapterSaveStatus === 'saving' ? '保存中...' : '保存章节提炼'}
+              </button>
+            )}
+            {selectedChapter && viewMode && (
+              <button
+                onClick={() => { setSelectedChapterId(null); }}
+                className="px-4 py-2 border border-border text-ink-light hover:text-ink text-sm font-medium rounded-lg transition-colors"
+              >
+                返回小说整体提炼
               </button>
             )}
           </div>
@@ -465,7 +588,13 @@ export default function NovelExtractionPage() {
               <h3 className="text-sm font-bold text-ink">章节列表</h3>
             </div>
             <div className="divide-y divide-border max-h-60 overflow-y-auto">
-              {chapters.map(ch => (
+              {chapters.map(ch => {
+                const extStatus = chapterExtractionStatuses.find(s => s.chapterId === ch.id);
+                const extractionStatus = extStatus?.status || 'not_extracted';
+                const statusLabel = extractionStatus === 'extracted' || extractionStatus === 'editing' || extractionStatus === 'confirmed'
+                  ? '已提炼' : extractionStatus === 'failed' ? '提炼失败' : '未提炼';
+                const statusColor = statusLabel === '已提炼' ? 'text-success' : statusLabel === '提炼失败' ? 'text-error' : 'text-ink-light';
+                return (
                 <button
                   key={ch.id}
                   onClick={() => setSelectedChapterId(selectedChapterId === ch.id ? null : ch.id)}
@@ -477,18 +606,17 @@ export default function NovelExtractionPage() {
                     <span className="text-sm text-ink-light mr-2">{ch.chapter_index}.</span>
                     <span className="text-sm text-ink">{ch.title}</span>
                   </div>
-                  <span className={`text-xs shrink-0 ml-3 ${
-                    ch.parse_status === 'parsed' ? 'text-success' : ch.parse_status === 'parse_failed' ? 'text-error' : 'text-ink-light'
-                  }`}>
-                    {ch.parse_status === 'parsed' ? '已提炼' : ch.parse_status === 'parse_failed' ? '提炼失败' : '未提炼'}
+                  <span className={`text-xs shrink-0 ml-3 ${statusColor}`}>
+                    {statusLabel}
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {status === 'not_started' && !selectedChapterId && (
+        {status === 'not_started' && !selectedChapterId && !viewMode && (
           <div className="bg-card border border-border rounded-xl p-8 text-center space-y-4">
             <p className="text-sm text-ink-light">点击下方按钮，AI 将根据已保存章节提炼故事骨干。整个过程可能需要 30 – 90 秒。</p>
             <button
@@ -498,6 +626,12 @@ export default function NovelExtractionPage() {
             >
               {extracting ? '提炼中...' : '开始提炼'}
             </button>
+          </div>
+        )}
+
+        {status === 'not_started' && !selectedChapterId && viewMode && (
+          <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <p className="text-sm text-ink-light">当前小说暂无提炼内容，请先进行 AI 提炼。</p>
           </div>
         )}
 
@@ -513,6 +647,7 @@ export default function NovelExtractionPage() {
               <h3 className="text-sm font-bold text-error mb-1">提炼失败</h3>
               <p className="text-sm text-error/80 whitespace-pre-wrap">{errorMessage || '未知错误'}</p>
             </div>
+            {!viewMode && (
             <button
               onClick={handleStart}
               disabled={extracting}
@@ -520,6 +655,7 @@ export default function NovelExtractionPage() {
             >
               {extracting ? '重试中...' : '重试提炼'}
             </button>
+            )}
           </div>
         )}
 
@@ -528,6 +664,7 @@ export default function NovelExtractionPage() {
             {/* Global extraction area - shown when no chapter selected */}
             {!selectedChapterId && (
               <>
+                {!viewMode && (
                 <div className="bg-card border border-border rounded-xl px-5 py-4 text-sm text-ink-light flex items-center justify-between gap-3 flex-wrap">
                   <span>
                     你可以编辑下方任意分区，编辑完成后点「保存最终结果」。
@@ -540,6 +677,7 @@ export default function NovelExtractionPage() {
                     {saving ? '保存中...' : '保存最终结果'}
                   </button>
                 </div>
+                )}
 
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <SearchBox
@@ -572,6 +710,7 @@ export default function NovelExtractionPage() {
                   ))}
                 </div>
 
+                {!viewMode && (
                 <div className="bg-card border border-border rounded-xl px-5 py-4 flex justify-end">
                   <button
                     onClick={handleSave}
@@ -581,15 +720,23 @@ export default function NovelExtractionPage() {
                     {saving ? '保存中...' : '保存最终结果'}
                   </button>
                 </div>
+                )}
               </>
             )}
 
             {/* Chapter editing view - shown when a chapter is selected */}
             {selectedChapterId && (
               <>
+                {!viewMode && (
                 <div className="bg-card border border-border rounded-xl px-5 py-4 text-sm text-ink-light flex items-center justify-between gap-3 flex-wrap">
                   <span>
                     编辑该章节的提炼内容。修改后记得点击右上角「保存章节提炼」。
+                    {(chapterExtractionData as Record<string, unknown>)?._source === 'from_novel_extraction' && (
+                      <span className="block text-xs text-ink-light/70 mt-1">该章节提炼内容来自小说整体提炼结果。</span>
+                    )}
+                    {(chapterExtractionData as Record<string, unknown>)?._source === 'chapter_ai_extraction' && (
+                      <span className="block text-xs text-ink-light/70 mt-1">该章节提炼内容来自章节单独提炼。</span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -600,6 +747,14 @@ export default function NovelExtractionPage() {
                     </button>
                   </div>
                 </div>
+                )}
+
+                {(!chapterExtractionData || Object.keys(chapterExtractionData).length === 0) && (
+                  <div className="bg-card border border-border rounded-xl p-8 text-center space-y-3">
+                    <p className="text-sm text-ink-light">当前章节暂无提炼内容。</p>
+                    <p className="text-xs text-ink-light/70">可以点击右上角「提炼章节」直接对该章节进行 AI 提炼。</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <SearchBox
@@ -623,15 +778,14 @@ export default function NovelExtractionPage() {
                       title={getSectionTitle(key as string)}
                       subtitle={getSectionSubtitle(key as string)}
                       value={chapterExtractionData?.[key] ?? (Array.isArray(aiResult?.[key]) ? [] : {})}
-                      onChange={(next) => patchChapterSection(key as string, next)}
+                      onChange={viewMode ? () => {} : (next) => patchChapterSection(key as string, next)}
                       onOpenSourceRef={handleOpenSourceRef}
-                      showDelete={isCustom}
-                      onDelete={isCustom ? () => deleteChapterSection(key as string) : undefined}
+                      showDelete={isCustom && !viewMode}
+                      onDelete={isCustom && !viewMode ? () => deleteChapterSection(key as string) : undefined}
                     />
                   ))}
                 </div>
-              </>
-            )}
+              </>)}
           </>
         )}
 
@@ -667,5 +821,13 @@ export default function NovelExtractionPage() {
         onConfirm={handleAddSection}
       />
     </div>
+  );
+}
+
+export default function NovelExtractionPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-pulse text-ink-light font-serif text-lg">加载中...</div></div>}>
+      <NovelExtractionInner />
+    </Suspense>
   );
 }
