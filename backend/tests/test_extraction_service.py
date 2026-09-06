@@ -95,7 +95,8 @@ class TestBuildExtractionPrompt(unittest.TestCase):
 
     def test_forbids_confidence_and_requires_uncertain_items(self):
         prompt = build_extraction_prompt('x', [{'chapter_index': 1, 'id': 1, 'title': 't', 'content': 'c'}])
-        assert 'confidence' in prompt
+        # 新 prompt 不再单独提 confidence，改为"编造"措辞 + uncertain_items
+        assert '编造' in prompt
         assert 'uncertain_items' in prompt
 
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 import ConfirmModal from '@/app/novels/ConfirmModal';
 
 const schemaTypeMap: Record<string, string> = {
@@ -105,10 +106,15 @@ export default function SchemasPage() {
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton />
+      </div>
       <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-serif font-bold text-ink">YAML Schema 规则库</h2>
-          <button onClick={() => router.push('/schemas/new')} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors">新建 Schema</button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push('/schemas/new')} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors">新建 Schema</button>
+          </div>
         </div>
 
         {msg && (

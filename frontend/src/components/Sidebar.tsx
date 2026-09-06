@@ -21,9 +21,33 @@ export default function Sidebar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 从当前路径解析 novel_id，用于"查看提炼内容"入口
+  const novelIdMatch = pathname.match(/^\/novels\/(\d+)/);
+  const currentNovelId = novelIdMatch ? Number(novelIdMatch[1]) : null;
+
+  function handleExtractionView() {
+    if (currentNovelId) {
+      router.push(`/novels/${currentNovelId}/extraction?saved=1`);
+      setOpen(false);
+    } else {
+      setOpen(false);
+      setTimeout(() => {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg text-sm font-medium z-50 shadow-lg bg-error text-white';
+        toast.textContent = '请先选择一本小说。';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+      }, 200);
+    }
+  }
+
   const navItems = [
     { label: '我的小说', path: '/novels', icon: '📖' },
     { label: '历史记录', path: '/history', icon: '📋' },
+    { label: '查看提炼内容', action: 'extraction-view', icon: '📑' },
+    { label: 'YAML 剧本', path: currentNovelId ? `/novels/${currentNovelId}/yaml` : `/novels/0/yaml`, icon: '🎬' },
+    { label: '关系图谱', path: '/relationship-graph', icon: '🕸️' },
+    { label: 'YAML 编辑器', path: '/yaml-editor', icon: '✏️' },
     { label: 'YAML Schema 规则库', path: '/schemas', icon: '📐' },
   ];
 
@@ -56,20 +80,32 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => { router.push(item.path); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer flex items-center gap-2 ${
-                pathname === item.path || pathname.startsWith(item.path + '/')
-                  ? 'bg-accent/10 text-accent font-medium'
-                  : 'text-ink-light hover:text-ink hover:bg-surface'
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const isActive = item.path && (pathname === item.path || pathname.startsWith(item.path + '/'));
+            const isExtractionActive = item.action === 'extraction-view' && pathname.includes('/extraction');
+            const active = isActive || isExtractionActive;
+            return (
+              <button
+                key={item.label}
+                onClick={() => {
+                  if (item.action === 'extraction-view') {
+                    handleExtractionView();
+                  } else if (item.path) {
+                    router.push(item.path);
+                    setOpen(false);
+                  }
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer flex items-center gap-2 ${
+                  active
+                    ? 'bg-accent/10 text-accent font-medium'
+                    : 'text-ink-light hover:text-ink hover:bg-surface'
+                }`}
+              >
+                <span>{item.icon}</span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <div className="p-3 border-t border-border space-y-2 shrink-0">

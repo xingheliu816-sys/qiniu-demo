@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import * as api from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import BackButton from '@/components/BackButton';
 import PageError from '@/components/PageError';
 
 const extractStatusLabel: Record<string, { label: string; cls: string }> = {
@@ -42,6 +43,7 @@ export default function NovelChaptersPage() {
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single' | 'batch'; ids: number[] } | null>(null);
+  const [chapterExtStatuses, setChapterExtStatuses] = useState<api.ChapterExtractionItem[]>([]);
 
   useEffect(() => {
     if (!isLoading && !username) router.replace('/login');
@@ -60,6 +62,13 @@ export default function NovelChaptersPage() {
       setNovelTitle(detail.novel.title);
       const chList = await api.getChapters(novelId);
       setChapters(chList.chapters || []);
+      // 加载章节提炼状态（用于"查看提炼"按钮判断）
+      try {
+        const ext = await api.getExtraction(novelId);
+        if (ext.success && ext.chapterExtractions) {
+          setChapterExtStatuses(ext.chapterExtractions);
+        }
+      } catch { /* ignore */ }
     } catch (err) {
       setPageError(err);
     } finally {
@@ -116,27 +125,31 @@ export default function NovelChaptersPage() {
     }
   }
 
-  // 单章「提炼」：合并 识别前置 + 进入小说提炼
+  // 单章「提炼」：调用章节级 AI 提炼，保存到 chapter_extractions
   async function handleSingleExtract(chapterId: number) {
     setProcessing(true);
     try {
-      const res = await api.extractFromChapter(chapterId);
+      const res = await api.extractChapterOnly(chapterId);
       if (!res.success) {
-        const fallback = res.stage === 'parse'
-          ? '章节内容处理失败，请检查章节正文后重试。'
-          : 'AI 提炼失败，请稍后重试。';
-        showToast(res.message || fallback, 'error');
+        showToast(res.message || 'AI 提炼失败，请稍后重试。', 'error');
+      } else {
+        showToast('章节提炼完成', 'success');
+        // 刷新章节提炼状态
+        try {
+          const ext = await api.getExtraction(novelId);
+          if (ext.success && ext.chapterExtractions) {
+            setChapterExtStatuses(ext.chapterExtractions);
+          }
+        } catch { /* ignore */ }
       }
-      router.push(`/novels/${novelId}/extraction`);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : '提炼失败', 'error');
-      router.push(`/novels/${novelId}/extraction`);
     } finally {
       setProcessing(false);
     }
   }
 
-  // 多选「AI 提炼」：合并 识别前置 + 进入小说提炼
+  // 多选「AI 提炼」：只提炼选中的章节
   async function handleBatchExtract() {
     if (selectedIds.size === 0) {
       showToast('请先选择需要提炼的章节。', 'error');
@@ -147,48 +160,37 @@ export default function NovelChaptersPage() {
       const res = await api.extractFromChapters(novelId, Array.from(selectedIds));
       setMultiMode(false);
       setSelectedIds(new Set());
-      if (!res.success) {
-        const fallback = res.stage === 'parse'
-          ? '章节内容处理失败，请检查章节正文后重试。'
-          : 'AI 提炼失败，请稍后重试。';
-        showToast(res.message || fallback, 'error');
+      if (res.success) {
+        showToast(res.message || '提炼完成', 'success');
+        // 重新加载章节提炼状态
+        try {
+          const ext = await api.getExtraction(novelId);
+          if (ext.success && ext.chapterExtractions) {
+            setChapterExtStatuses(ext.chapterExtractions);
+          }
+        } catch { /* ignore */ }
+        router.push(`/novels/${novelId}/extraction?saved=1`);
+      } else {
+        showToast(res.message || 'AI 提炼失败，请稍后重试。', 'error');
       }
-      router.push(`/novels/${novelId}/extraction`);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : '提炼失败', 'error');
-      router.push(`/novels/${novelId}/extraction`);
     } finally {
       setProcessing(false);
     }
   }
 
-  // 顶部「AI 提炼」按钮：多选模式走批量，非多选走「全部章节提炼」
+  // 顶部「AI 提炼」按钮：只在编辑模式 + 选中章节时可用，仅提炼选中的章节
   async function handleAIBtnClick() {
-    if (multiMode) {
-      handleBatchExtract();
-      return;
-    }
-    if (chapters.length === 0) {
-      showToast('请先添加章节。', 'error');
-      return;
-    }
-    setProcessing(true);
-    try {
-      const ids = chapters.map(c => c.id);
-      const res = await api.extractFromChapters(novelId, ids);
-      if (!res.success) {
-        const fallback = res.stage === 'parse'
-          ? '章节内容处理失败，请检查章节正文后重试。'
-          : 'AI 提炼失败，请稍后重试。';
-        showToast(res.message || fallback, 'error');
+    if (!multiMode || selectedIds.size === 0) return;
+    // 检查是否有已提炼章节
+    const hasExtracted = chapters.some(c => selectedIds.has(c.id) && c.extractionStatus === 'extracted');
+    if (hasExtracted) {
+      if (!window.confirm('所选章节中包含已提炼章节，重新提炼会生成新的 AI 提炼结果，是否继续？')) {
+        return;
       }
-      router.push(`/novels/${novelId}/extraction`);
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : '提炼失败', 'error');
-      router.push(`/novels/${novelId}/extraction`);
-    } finally {
-      setProcessing(false);
     }
+    handleBatchExtract();
   }
 
   // Delete handlers
@@ -252,29 +254,23 @@ export default function NovelChaptersPage() {
 
   if (!username) return null;
 
-  const allParsedCount = chapters.filter(c => c.parse_status === 'parsed').length;
+  const allExtractedCount = chapters.filter(c => c.extractionStatus === 'extracted').length;
 
   return (
     <div className="flex-1 flex">
       <Sidebar />
+      <div className="fixed right-3 top-3 z-40">
+        <BackButton />
+      </div>
       <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-serif font-bold text-ink">{novelTitle || '未命名'}</h2>
             <p className="text-sm text-ink-light mt-1">
-              {chapters.length} 个章节 · 已提炼 {allParsedCount} 个
+              {chapters.length} 个章节 · 已提炼 {allExtractedCount} 个
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {multiMode && (
-              <button
-                onClick={confirmBatchDelete}
-                disabled={processing}
-                className="text-sm px-3 py-1.5 rounded-lg border border-error text-error hover:bg-error/5 disabled:opacity-50 transition-colors"
-              >
-                删除
-              </button>
-            )}
             <button
               onClick={handleViewNovelExtraction}
               className="text-sm px-3 py-1.5 rounded-lg border border-border text-ink-light hover:text-accent hover:border-accent/30 transition-colors"
@@ -282,19 +278,42 @@ export default function NovelChaptersPage() {
               查看小说整体提炼
             </button>
             <button
+              onClick={() => router.push(`/novels/${novelId}/yaml`)}
+              className="text-sm px-3 py-1.5 rounded-lg border border-border text-ink-light hover:text-accent hover:border-accent/30 transition-colors"
+            >
+              YAML 剧本
+            </button>
+            <button
               onClick={handleAIBtnClick}
-              disabled={processing || chapters.length === 0}
-              className="text-sm px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 text-white transition-colors"
+              disabled={processing || !multiMode || selectedIds.size === 0}
+              className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                multiMode && selectedIds.size > 0
+                  ? 'bg-accent hover:bg-accent-hover text-white'
+                  : 'bg-accent/30 text-white/50 cursor-not-allowed'
+              }`}
             >
               {processing ? '处理中...' : 'AI 提炼'}
             </button>
+            {multiMode && (
+              <button
+                onClick={confirmBatchDelete}
+                disabled={processing || selectedIds.size === 0}
+                className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                  selectedIds.size > 0
+                    ? 'border-error text-error hover:bg-error/5'
+                    : 'border-border text-ink-light/30 cursor-not-allowed'
+                }`}
+              >
+                删除
+              </button>
+            )}
             <button
               onClick={toggleMultiMode}
               className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                 multiMode ? 'bg-accent text-white border-accent' : 'border-border text-ink-light hover:border-accent/30'
               }`}
             >
-              {multiMode ? '取消多选' : '多选'}
+              {multiMode ? '取消编辑' : '编辑'}
             </button>
           </div>
         </div>
@@ -323,11 +342,23 @@ export default function NovelChaptersPage() {
             )}
 
             {chapters.map((ch) => {
-              const st = extractStatusLabel[ch.parse_status] || extractStatusLabel.not_parsed;
+              const isExtracted = ch.extractionStatus === 'extracted';
+              const isFailed = ch.extractionStatus === 'extract_failed';
+
+              const st = isExtracted
+                ? { label: '已提炼', cls: 'bg-success/10 text-success' }
+                : isFailed
+                ? { label: '提炼失败', cls: 'bg-error/10 text-error' }
+                : extractStatusLabel[ch.parse_status] || extractStatusLabel.not_parsed;
 
               let chapterBtnLabel = '提炼';
-              if (ch.parse_status === 'parsed') chapterBtnLabel = '查看提炼';
-              else if (ch.parse_status === 'parse_failed') chapterBtnLabel = '重新提炼';
+              let chapterBtnAction: () => void = () => { handleSingleExtract(ch.id); };
+              if (isExtracted) {
+                chapterBtnLabel = '查看提炼';
+                chapterBtnAction = () => { router.push(`/novels/${novelId}/extraction?saved=1`); };
+              } else if (isFailed || ch.parse_status === 'parse_failed') {
+                chapterBtnLabel = '重新提炼';
+              }
 
               return (
                 <div
@@ -357,7 +388,7 @@ export default function NovelChaptersPage() {
                   </div>
                   <div className="flex items-center gap-2 ml-4 shrink-0">
                     <button
-                      onClick={() => handleSingleExtract(ch.id)}
+                      onClick={chapterBtnAction}
                       disabled={processing}
                       className="text-xs text-accent hover:text-accent-hover disabled:opacity-50 transition-colors"
                     >
